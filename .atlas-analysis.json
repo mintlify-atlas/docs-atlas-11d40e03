@@ -1,0 +1,196 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Modal Client SDKs",
+  "projectDescription": "Multi-language client libraries (Python, TypeScript, Go) for Modal's serverless cloud compute platform",
+  "theme": "palm",
+  "primaryColor": "#9333ea",
+  "lightColor": "#a855f7",
+  "darkColor": "#7e22ce",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/apps",
+              "concepts/functions",
+              "concepts/classes",
+              "concepts/images",
+              "concepts/sandboxes"
+            ]
+          },
+          {
+            "group": "Python SDK",
+            "pages": [
+              "python/overview",
+              "python/installation",
+              "python/basic-usage",
+              "python/async-support",
+              "python/cli-reference"
+            ]
+          },
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "typescript/overview",
+              "typescript/installation",
+              "typescript/basic-usage",
+              "typescript/client"
+            ]
+          },
+          {
+            "group": "Go SDK",
+            "pages": [
+              "go/overview",
+              "go/installation",
+              "go/basic-usage",
+              "go/client"
+            ]
+          },
+          {
+            "group": "Storage & Data",
+            "pages": [
+              "storage/volumes",
+              "storage/network-file-systems",
+              "storage/cloud-bucket-mounts",
+              "storage/dicts",
+              "storage/queues"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/secrets",
+              "configuration/environments",
+              "configuration/gpu",
+              "configuration/retries",
+              "configuration/scheduling"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/parallel-execution",
+              "advanced/web-endpoints",
+              "advanced/tunnels",
+              "advanced/proxies",
+              "advanced/container-lifecycle"
+            ]
+          },
+          {
+            "group": "Migration & Changelog",
+            "pages": [
+              "migration/v05-migration-guide",
+              "migration/python-changelog",
+              "migration/js-go-changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Python API",
+            "pages": [
+              "api/python/app",
+              "api/python/function",
+              "api/python/cls",
+              "api/python/image",
+              "api/python/sandbox",
+              "api/python/volume",
+              "api/python/network-file-system",
+              "api/python/cloud-bucket-mount",
+              "api/python/dict",
+              "api/python/queue",
+              "api/python/secret",
+              "api/python/client",
+              "api/python/decorators",
+              "api/python/gpu",
+              "api/python/retries",
+              "api/python/schedule",
+              "api/python/exceptions"
+            ]
+          },
+          {
+            "group": "TypeScript API",
+            "pages": [
+              "api/typescript/modal-client",
+              "api/typescript/apps",
+              "api/typescript/functions",
+              "api/typescript/cls",
+              "api/typescript/images",
+              "api/typescript/sandboxes",
+              "api/typescript/volumes",
+              "api/typescript/queues",
+              "api/typescript/secrets"
+            ]
+          },
+          {
+            "group": "Go API",
+            "pages": [
+              "api/go/client",
+              "api/go/apps",
+              "api/go/functions",
+              "api/go/cls",
+              "api/go/images",
+              "api/go/sandboxes",
+              "api/go/volumes",
+              "api/go/queues",
+              "api/go/secrets"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-language SDKs (Python, TypeScript, Go) for serverless compute",
+    "Declarative container image building with custom dependencies",
+    "Serverless function execution with automatic scaling",
+    "Stateful class-based services with lifecycle management",
+    "Interactive sandboxes for arbitrary code execution",
+    "Persistent storage with Volumes and Network File Systems",
+    "Queue and Dict primitives for distributed applications",
+    "Web endpoint decorators for HTTP/ASGI/WSGI services",
+    "GPU and accelerator configuration support",
+    "Secret management and environment configuration",
+    "Parallel execution with map and batch operations",
+    "CLI tools for deployment and management"
+  ],
+  "publicApiSurface": [
+    "modal.App - Main application container",
+    "modal.Function - Serverless function decorator and runtime",
+    "modal.Cls - Stateful class decorator and lifecycle",
+    "modal.Image - Container image builder",
+    "modal.Sandbox - Interactive container runtime",
+    "modal.Volume - Persistent file storage",
+    "modal.NetworkFileSystem - Shared network file system",
+    "modal.CloudBucketMount - S3/GCS bucket mounting",
+    "modal.Dict - Key-value store",
+    "modal.Queue - Message queue",
+    "modal.Secret - Secret management",
+    "modal.Client - SDK client for programmatic access",
+    "@modal.web_endpoint - HTTP endpoint decorator",
+    "@modal.asgi_app - ASGI application decorator",
+    "@modal.batched - Batching decorator for functions",
+    "@modal.concurrent - Concurrent execution control",
+    "modal.Retries - Retry configuration",
+    "modal.Cron / modal.Period - Scheduled execution",
+    "modal.GPU - GPU configuration",
+    "modal.SchedulerPlacement - Scheduler placement hints",
+    "ModalClient (JS/TS) - TypeScript SDK client",
+    "modal.NewClient (Go) - Go SDK client"
+  ]
+}
