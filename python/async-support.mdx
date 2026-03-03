@@ -1,0 +1,316 @@
+---
+title: Async support
+description: Use async/await patterns with Modal's Python SDK for concurrent execution.
+---
+
+Modal provides full support for Python's async/await syntax, allowing you to write asynchronous functions that run efficiently in the cloud.
+
+## Async functions
+
+Define async functions using the `async def` syntax:
+
+```python
+import modal
+import asyncio
+
+app = modal.App("async-example")
+
+@app.function()
+async def async_hello(name: str):
+    await asyncio.sleep(1)  # Simulate async work
+    return f"Hello, {name}!"
+```
+
+## Calling async functions
+
+### From async context
+
+Use `.remote.aio()` to call functions asynchronously:
+
+```python
+@app.local_entrypoint()
+async def main():
+    result = await async_hello.remote.aio("Alice")
+    print(result)
+```
+
+### From sync context
+
+Use `.remote()` to call async functions synchronously:
+
+```python
+@app.local_entrypoint()
+def main():
+    result = async_hello.remote("Bob")
+    print(result)
+```
+
+## Parallel execution
+
+### Using map with async
+
+Process multiple inputs concurrently:
+
+```python
+@app.local_entrypoint()
+async def main():
+    names = ["Alice", "Bob", "Charlie"]
+    
+    # Map returns async results
+    async for result in async_hello.map.aio(names):
+        print(result)
+```
+
+### Manual concurrency with asyncio
+
+For more control, use `asyncio.gather()`:
+
+```python
+@app.local_entrypoint()
+async def main():
+    tasks = [
+        async_hello.remote.aio("Alice"),
+        async_hello.remote.aio("Bob"),
+        async_hello.remote.aio("Charlie")
+    ]
+    results = await asyncio.gather(*tasks)
+    print(results)
+```
+
+## Async generators
+
+Modal supports async generators for streaming results:
+
+```python
+@app.function()
+async def generate_numbers(n: int):
+    for i in range(n):
+        await asyncio.sleep(0.1)
+        yield i
+
+@app.local_entrypoint()
+async def main():
+    async for number in generate_numbers.remote_gen.aio(10):
+        print(f"Received: {number}")
+```
+
+## Mixing sync and async
+
+You can call synchronous functions from async code and vice versa:
+
+```python
+@app.function()
+def sync_function(x: int):
+    return x * 2
+
+@app.function()
+async def async_function(x: int):
+    # Call sync function from async context
+    result = await sync_function.remote.aio(x)
+    return result + 1
+
+@app.local_entrypoint()
+async def main():
+    result = await async_function.remote.aio(5)
+    print(result)  # 11
+```
+
+## Async HTTP requests
+
+Use async HTTP libraries for concurrent API calls:
+
+```python
+import aiohttp
+
+image = modal.Image.debian_slim().pip_install("aiohttp")
+
+@app.function(image=image)
+async def fetch_url(url: str):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.text()
+
+@app.local_entrypoint()
+async def main():
+    urls = [
+        "https://api.example.com/1",
+        "https://api.example.com/2",
+        "https://api.example.com/3",
+    ]
+    
+    tasks = [fetch_url.remote.aio(url) for url in urls]
+    results = await asyncio.gather(*tasks)
+    print(f"Fetched {len(results)} pages")
+```
+
+## Async context managers
+
+Modal supports async context managers for resource management:
+
+```python
+from contextlib import asynccontextmanager
+
+@app.function()
+async def process_with_cleanup():
+    @asynccontextmanager
+    async def database_connection():
+        # Setup
+        conn = await connect_to_db()
+        try:
+            yield conn
+        finally:
+            # Cleanup
+            await conn.close()
+    
+    async with database_connection() as conn:
+        result = await conn.query("SELECT * FROM users")
+        return result
+```
+
+## Client API
+
+Modal's `Client` class supports async operations:
+
+```python
+from modal import Client
+
+@app.local_entrypoint()
+async def main():
+    async with Client.from_env() as client:
+        # Use client for low-level operations
+        pass
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use async for I/O-bound operations">
+    Async functions are ideal for I/O-bound tasks like HTTP requests, database queries, and file operations. For CPU-bound tasks, regular synchronous functions often perform better.
+  </Accordion>
+
+  <Accordion title="Prefer .aio() methods in async contexts">
+    When calling Modal functions from async code, use `.remote.aio()` instead of `.remote()` to avoid blocking the event loop:
+    
+    ```python
+    # Good
+    result = await my_function.remote.aio(arg)
+    
+    # Bad - blocks event loop
+    result = my_function.remote(arg)
+    ```
+  </Accordion>
+
+  <Accordion title="Handle exceptions in concurrent tasks">
+    When using `asyncio.gather()`, handle exceptions appropriately:
+    
+    ```python
+    results = await asyncio.gather(
+        *tasks,
+        return_exceptions=True  # Don't fail on first exception
+    )
+    
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Task failed: {result}")
+    ```
+  </Accordion>
+
+  <Accordion title="Use async generators for streaming">
+    For large datasets or real-time processing, use async generators to stream results:
+    
+    ```python
+    @app.function()
+    async def stream_data():
+        for item in large_dataset:
+            await asyncio.sleep(0)  # Yield control
+            yield process(item)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complete async example
+
+Here's a complete example demonstrating async patterns:
+
+```python
+import modal
+import asyncio
+import aiohttp
+
+app = modal.App("async-web-scraper")
+
+image = modal.Image.debian_slim().pip_install(
+    "aiohttp",
+    "beautifulsoup4"
+)
+
+@app.function(image=image)
+async def fetch_and_parse(url: str):
+    """Fetch a URL and extract its title."""
+    from bs4 import BeautifulSoup
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            html = await response.text()
+            soup = BeautifulSoup(html, 'html.parser')
+            title = soup.find('title')
+            return {
+                'url': url,
+                'title': title.string if title else 'No title',
+                'status': response.status
+            }
+
+@app.function()
+async def process_batch(urls: list[str]):
+    """Process multiple URLs concurrently."""
+    tasks = [fetch_and_parse.remote.aio(url) for url in urls]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    successful = [r for r in results if not isinstance(r, Exception)]
+    failed = [r for r in results if isinstance(r, Exception)]
+    
+    return {
+        'successful': len(successful),
+        'failed': len(failed),
+        'results': successful
+    }
+
+@app.local_entrypoint()
+async def main():
+    urls = [
+        "https://example.com",
+        "https://python.org",
+        "https://modal.com",
+    ]
+    
+    print("Starting async web scraping...")
+    summary = await process_batch.remote.aio(urls)
+    
+    print(f"\nProcessed {summary['successful']} URLs successfully")
+    print(f"Failed: {summary['failed']}")
+    
+    for result in summary['results']:
+        print(f"  {result['url']}: {result['title']}")
+```
+
+## Synchronicity library
+
+Modal uses the [synchronicity](https://github.com/modal-labs/synchronicity) library internally to provide both sync and async APIs from a single implementation. This is why you can call functions with both `.remote()` and `.remote.aio()`.
+
+<Note>
+  The synchronicity library (version ~0.11.1) is listed in Modal's dependencies and handles the automatic generation of sync wrappers for async code.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Basic usage" icon="rocket" href="/python/basic-usage">
+    Review fundamental Modal patterns
+  </Card>
+  <Card title="Web endpoints" icon="globe" href="/guides/webhooks">
+    Create async web endpoints
+  </Card>
+  <Card title="API reference" icon="book" href="/docs/reference">
+    Explore the complete API reference
+  </Card>
+</CardGroup>

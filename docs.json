@@ -1,122 +1,170 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Modal Client SDKs",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#9333ea",
+    "light": "#a855f7",
+    "dark": "#7e22ce"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/modal-labs/modal-client"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/modal-labs/modal-client"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
+              "installation",
               "quickstart",
-              "development"
+              "authentication"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/apps",
+              "concepts/functions",
+              "concepts/classes",
+              "concepts/images",
+              "concepts/sandboxes"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Python SDK",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "python/overview",
+              "python/installation",
+              "python/basic-usage",
+              "python/async-support",
+              "python/cli-reference"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "TypeScript SDK",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "typescript/overview",
+              "typescript/installation",
+              "typescript/basic-usage",
+              "typescript/client"
+            ]
+          },
+          {
+            "group": "Go SDK",
+            "pages": [
+              "go/overview",
+              "go/installation",
+              "go/basic-usage",
+              "go/client"
+            ]
+          },
+          {
+            "group": "Storage & Data",
+            "pages": [
+              "storage/volumes",
+              "storage/network-file-systems",
+              "storage/cloud-bucket-mounts",
+              "storage/dicts",
+              "storage/queues"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/secrets",
+              "configuration/environments",
+              "configuration/gpu",
+              "configuration/retries",
+              "configuration/scheduling"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/parallel-execution",
+              "advanced/web-endpoints",
+              "advanced/tunnels",
+              "advanced/proxies",
+              "advanced/container-lifecycle"
+            ]
+          },
+          {
+            "group": "Migration & Changelog",
+            "pages": [
+              "migration/v05-migration-guide",
+              "migration/python-changelog",
+              "migration/js-go-changelog"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Python API",
             "pages": [
-              "api-reference/introduction"
+              "api/python/app",
+              "api/python/function",
+              "api/python/cls",
+              "api/python/image",
+              "api/python/sandbox",
+              "api/python/volume",
+              "api/python/network-file-system",
+              "api/python/cloud-bucket-mount",
+              "api/python/dict",
+              "api/python/queue",
+              "api/python/secret",
+              "api/python/client",
+              "api/python/decorators",
+              "api/python/gpu",
+              "api/python/retries",
+              "api/python/schedule",
+              "api/python/exceptions"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "TypeScript API",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/typescript/modal-client",
+              "api/typescript/apps",
+              "api/typescript/functions",
+              "api/typescript/cls",
+              "api/typescript/images",
+              "api/typescript/sandboxes",
+              "api/typescript/volumes",
+              "api/typescript/queues",
+              "api/typescript/secrets"
+            ]
+          },
+          {
+            "group": "Go API",
+            "pages": [
+              "api/go/client",
+              "api/go/apps",
+              "api/go/functions",
+              "api/go/cls",
+              "api/go/images",
+              "api/go/sandboxes",
+              "api/go/volumes",
+              "api/go/queues",
+              "api/go/secrets"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

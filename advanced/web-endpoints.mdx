@@ -1,0 +1,319 @@
+---
+title: Web endpoints
+description: Expose HTTP endpoints with fastapi_endpoint, asgi_app, wsgi_app, and web_server decorators
+---
+
+## Overview
+
+Modal provides multiple ways to expose HTTP endpoints from your functions, ranging from simple single-route handlers to full ASGI/WSGI applications.
+
+## FastAPI endpoint
+
+The `@modal.fastapi_endpoint` decorator creates a simple web endpoint backed by FastAPI:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function()
+@modal.fastapi_endpoint(method="GET")
+def hello():
+    return {"message": "Hello, world!"}
+```
+
+### Configuration options
+
+```python
+@app.function()
+@modal.fastapi_endpoint(
+    method="POST",  # HTTP method (GET, POST, PUT, DELETE, etc.)
+    label="my-endpoint",  # Custom subdomain label
+    docs=True,  # Enable /docs endpoint
+    requires_proxy_auth=False,  # Require Modal-Key and Modal-Secret headers
+    custom_domains=["api.example.com"],  # Use custom domain(s)
+)
+def handler(data: dict):
+    return {"processed": data}
+```
+
+<Note>
+Endpoints created with `@modal.fastapi_endpoint` automatically have CORS enabled and support FastAPI features like request validation and dependency injection.
+</Note>
+
+### Custom domains
+
+Deploy to your own domain:
+
+```python
+@app.function()
+@modal.fastapi_endpoint(
+    method="GET",
+    custom_domains=["api.mycompany.com", "api-v2.mycompany.com"]
+)
+def api_handler():
+    return {"version": "2.0"}
+```
+
+### Proxy authentication
+
+Require Modal authentication headers:
+
+```python
+@app.function()
+@modal.fastapi_endpoint(method="POST", requires_proxy_auth=True)
+def secure_endpoint(data: dict):
+    # Requires Modal-Key and Modal-Secret headers
+    return {"status": "authenticated"}
+```
+
+## ASGI app
+
+The `@modal.asgi_app` decorator allows you to deploy full ASGI applications (FastAPI, Starlette, Quart, etc.):
+
+```python
+from fastapi import FastAPI
+import modal
+
+app = modal.App()
+
+@app.function()
+@modal.asgi_app()
+def create_app():
+    web_app = FastAPI()
+    
+    @web_app.get("/")
+    def index():
+        return {"message": "Welcome"}
+    
+    @web_app.post("/items")
+    def create_item(item: dict):
+        return {"created": item}
+    
+    return web_app
+```
+
+### Configuration
+
+```python
+@app.function()
+@modal.asgi_app(
+    label="my-api",  # Custom subdomain
+    custom_domains=["api.example.com"],  # Custom domain(s)
+    requires_proxy_auth=False,  # Require authentication
+)
+def create_app():
+    # Return an ASGI application
+    ...
+```
+
+<Tip>
+Use `@modal.asgi_app` when you need multiple routes, middleware, or advanced web framework features.
+</Tip>
+
+### Requirements
+
+- The decorated function must be **synchronous** (not async)
+- The function must take **no parameters**
+- The function must **return** an ASGI application
+
+```python
+# ✓ Correct
+@app.function()
+@modal.asgi_app()
+def create_asgi():
+    return fastapi_app
+
+# ✗ Incorrect - async not allowed
+@app.function()
+@modal.asgi_app()
+async def create_asgi():
+    return fastapi_app
+
+# ✗ Incorrect - parameters not allowed
+@app.function()
+@modal.asgi_app()
+def create_asgi(config: dict):
+    return fastapi_app
+```
+
+## WSGI app
+
+The `@modal.wsgi_app` decorator supports WSGI applications (Flask, Django, etc.):
+
+```python
+from flask import Flask
+import modal
+
+app = modal.App()
+
+@app.function()
+@modal.wsgi_app()
+def create_app():
+    flask_app = Flask(__name__)
+    
+    @flask_app.route("/")
+    def index():
+        return "Hello from Flask!"
+    
+    @flask_app.route("/api/data")
+    def api_data():
+        return {"data": [1, 2, 3]}
+    
+    return flask_app
+```
+
+### Configuration
+
+```python
+@app.function()
+@modal.wsgi_app(
+    label="flask-app",  # Custom subdomain
+    custom_domains=["www.example.com"],  # Custom domain(s)
+    requires_proxy_auth=False,  # Require authentication
+)
+def create_app():
+    # Return a WSGI application
+    ...
+```
+
+<Note>
+WSGI is a synchronous standard. For modern async frameworks, use `@modal.asgi_app` instead.
+</Note>
+
+## Web server
+
+The `@modal.web_server` decorator exposes arbitrary HTTP servers running inside the container:
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+
+@app.function()
+@modal.web_server(8000)
+def file_server():
+    # Start Python's built-in HTTP server
+    subprocess.Popen(["python", "-m", "http.server", "-d", "/", "8000"], shell=False)
+```
+
+### Configuration
+
+```python
+@app.function()
+@modal.web_server(
+    8000,  # Port number (required, first argument)
+    startup_timeout=5.0,  # Seconds to wait for server startup
+    label="my-server",  # Custom subdomain
+    custom_domains=["files.example.com"],  # Custom domain(s)
+    requires_proxy_auth=False,  # Require authentication
+)
+def start_server():
+    # Start any HTTP server listening on port 8000
+    ...
+```
+
+### Use cases
+
+<Steps>
+
+### Rust/Go HTTP servers
+
+Run compiled binaries that serve HTTP:
+
+```python
+@app.function()
+@modal.web_server(3000)
+def rust_server():
+    subprocess.Popen(["/app/target/release/server"])
+```
+
+### Non-ASGI frameworks
+
+Integrate frameworks like aiohttp or Tornado:
+
+```python
+@app.function()
+@modal.web_server(8080)
+def aiohttp_server():
+    from aiohttp import web
+    app = web.Application()
+    # Configure app...
+    web.run_app(app, port=8080)
+```
+
+### Development tools
+
+Host development servers:
+
+```python
+@app.function()
+@modal.web_server(8000)
+def dev_server():
+    subprocess.Popen(["npm", "run", "dev"])
+```
+
+</Steps>
+
+## Method decorator for classes
+
+All web decorators work with class methods:
+
+```python
+app = modal.App()
+
+@app.cls()
+class MyAPI:
+    @modal.fastapi_endpoint(method="GET")
+    def health(self):
+        return {"status": "healthy"}
+    
+    @modal.fastapi_endpoint(method="POST")
+    def process(self, data: dict):
+        # Access instance state
+        return {"processed": data}
+```
+
+## Web endpoint (deprecated)
+
+The `@modal.web_endpoint` decorator is deprecated. Use `@modal.fastapi_endpoint` instead:
+
+```python
+# Old (deprecated)
+@modal.web_endpoint(method="GET")
+def handler():
+    return {"data": "value"}
+
+# New (recommended)
+@modal.fastapi_endpoint(method="GET")
+def handler():
+    return {"data": "value"}
+```
+
+<Warning>
+`@modal.web_endpoint` was renamed to `@modal.fastapi_endpoint` in v0.73.82. The old name still works but will be removed in a future version.
+</Warning>
+
+## Comparison
+
+| Decorator | Use case | Multiple routes | Framework |
+|-----------|----------|----------------|----------|
+| `@modal.fastapi_endpoint` | Simple single endpoint | No | FastAPI |
+| `@modal.asgi_app` | Full ASGI app | Yes | Any ASGI |
+| `@modal.wsgi_app` | Full WSGI app | Yes | Any WSGI |
+| `@modal.web_server` | Custom HTTP server | Yes | Any |
+
+## Best practices
+
+1. **Choose the right decorator**: Use `fastapi_endpoint` for simple cases, ASGI/WSGI for full applications
+2. **Enable CORS**: `fastapi_endpoint` has CORS enabled by default; configure it manually for ASGI/WSGI apps
+3. **Use custom domains**: Set up custom domains for production deployments
+4. **Monitor performance**: Web endpoints auto-scale based on traffic
+5. **Secure sensitive endpoints**: Use `requires_proxy_auth` or implement your own authentication
+
+## Related resources
+
+- [Web endpoints guide](https://modal.com/docs/guide/webhooks)
+- [Tunnels for development](/advanced/tunnels)
+- [Function reference](/reference/function)

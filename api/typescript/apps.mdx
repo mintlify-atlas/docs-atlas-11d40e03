@@ -1,0 +1,99 @@
+---
+title: Apps
+description: Reference a deployed Modal App by name
+---
+
+Apps are containers for Modal resources like Functions, Classes, and Sandboxes. Use the Apps API to reference deployed apps.
+
+## Access the Apps API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const app = await modal.apps.fromName("my-app");
+```
+
+## Methods
+
+### `modal.apps.fromName(name, params?)`
+
+Reference a deployed App by name, or create it if it does not exist.
+
+<ParamField path="name" type="string" required>
+  Name of the App to reference.
+</ParamField>
+
+<ParamField path="params" type="AppFromNameParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name to use. Defaults to the workspace default environment.
+    </ParamField>
+    
+    <ParamField path="createIfMissing" type="boolean" optional>
+      If `true`, creates the App if it doesn't exist. Defaults to `false`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<App>">
+  The referenced App object.
+</ResponseField>
+
+```typescript
+// Reference an existing app
+const app = await modal.apps.fromName("my-app");
+
+// Create if missing
+const app = await modal.apps.fromName("my-app", {
+  createIfMissing: true,
+});
+
+// Use a specific environment
+const app = await modal.apps.fromName("my-app", {
+  environment: "staging",
+});
+```
+
+<Note>
+  Throws `NotFoundError` if the app doesn't exist and `createIfMissing` is `false`.
+</Note>
+
+## App object
+
+The `App` object represents a deployed Modal application.
+
+### Properties
+
+<ResponseField name="appId" type="string">
+  Unique identifier for the App.
+</ResponseField>
+
+<ResponseField name="name" type="string | undefined">
+  Name of the App, if it was looked up by name.
+</ResponseField>
+
+## Example: Create a sandbox in an app
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("my-app", {
+  createIfMissing: true,
+});
+
+const image = modal.images.fromRegistry("alpine:3.21");
+
+const sandbox = await modal.sandboxes.create(app, image, {
+  command: ["echo", "Hello from sandbox!"],
+});
+
+const output = await sandbox.stdout.readText();
+console.log(output);
+
+await sandbox.terminate();
+```

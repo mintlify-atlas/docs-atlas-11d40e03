@@ -1,0 +1,221 @@
+---
+title: modal.Sandbox
+description: API reference for Modal Sandbox class
+---
+
+A Sandbox object lets you interact with a running sandbox. This API is similar to Python's [asyncio.subprocess.Process](https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.subprocess.Process).
+
+Refer to the [sandbox guide](https://modal.com/docs/guide/sandbox) on how to spawn and use sandboxes.
+
+## Methods
+
+### Sandbox.create
+
+```python
+modal.Sandbox.create(
+    *args: str,
+    app: Optional[App] = None,
+    name: Optional[str] = None,
+    image: Optional[Image] = None,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    network_file_systems: dict[Union[str, os.PathLike], NetworkFileSystem] = {},
+    timeout: int = 300,
+    idle_timeout: Optional[int] = None,
+    workdir: Optional[str] = None,
+    gpu: GPU_T = None,
+    cloud: Optional[str] = None,
+    region: Optional[Union[str, Sequence[str]]] = None,
+    cpu: Optional[Union[float, tuple[float, float]]] = None,
+    memory: Optional[Union[int, tuple[int, int]]] = None,
+    block_network: bool = False,
+    cidr_allowlist: Optional[Sequence[str]] = None,
+    volumes: dict[Union[str, os.PathLike], Union[Volume, CloudBucketMount]] = {},
+    pty: bool = False,
+    encrypted_ports: Sequence[int] = [],
+    h2_ports: Sequence[int] = [],
+    unencrypted_ports: Sequence[int] = [],
+    custom_domain: Optional[str] = None,
+    proxy: Optional[Proxy] = None,
+    verbose: bool = False,
+    client: Optional[Client] = None,
+    environment_name: Optional[str] = None,
+) -> Sandbox
+```
+
+Create a new Sandbox to run untrusted, arbitrary code.
+
+<ParamField path="args" type="str">
+  Command and arguments to run in the sandbox (sets the CMD).
+</ParamField>
+
+<ParamField path="app" type="App" required>
+  Associate the sandbox with an app. Required unless creating from a container.
+</ParamField>
+
+<ParamField path="name" type="str">
+  Optional name for the sandbox. Unique within an app.
+</ParamField>
+
+<ParamField path="image" type="Image">
+  Image to run as the container for the sandbox.
+</ParamField>
+
+<ParamField path="env" type="dict[str, str]">
+  Environment variables to set in the Sandbox.
+</ParamField>
+
+<ParamField path="secrets" type="Collection[Secret]">
+  Secrets to inject into the Sandbox as environment variables.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="300">
+  Maximum lifetime of the sandbox in seconds.
+</ParamField>
+
+<ParamField path="idle_timeout" type="int">
+  Idle time in seconds before termination.
+</ParamField>
+
+<ParamField path="workdir" type="str">
+  Working directory of the sandbox.
+</ParamField>
+
+<ParamField path="gpu" type="GPU_T">
+  GPU configuration (e.g., "A100", "T4").
+</ParamField>
+
+<ParamField path="cpu" type="Union[float, tuple[float, float]]">
+  CPU cores (request) or (request, limit).
+</ParamField>
+
+<ParamField path="memory" type="Union[int, tuple[int, int]]">
+  Memory in MiB (request) or (request, limit).
+</ParamField>
+
+<ParamField path="block_network" type="bool" default="False">
+  Whether to block network access.
+</ParamField>
+
+<ParamField path="volumes" type="dict">
+  Mount points for Modal Volumes and CloudBucketMounts.
+</ParamField>
+
+<ParamField path="pty" type="bool" default="False">
+  Enable a PTY for the Sandbox.
+</ParamField>
+
+<ParamField path="encrypted_ports" type="Sequence[int]">
+  List of ports to tunnel with TLS encryption.
+</ParamField>
+
+<ResponseField name="sandbox" type="Sandbox">
+  The created Sandbox instance.
+</ResponseField>
+
+**Example:**
+
+```python
+app = modal.App.lookup('sandbox-hello-world', create_if_missing=True)
+sandbox = modal.Sandbox.create("echo", "hello world", app=app)
+print(sandbox.stdout.read())
+sandbox.wait()
+```
+
+### sandbox.wait
+
+```python
+sandbox.wait() -> int
+```
+
+Wait for the sandbox to finish and return its exit code.
+
+<ResponseField name="exit_code" type="int">
+  Exit code of the sandbox process.
+</ResponseField>
+
+### sandbox.terminate
+
+```python
+sandbox.terminate()
+```
+
+Terminate the sandbox.
+
+### sandbox.poll
+
+```python
+sandbox.poll() -> Optional[int]
+```
+
+Check if the sandbox has finished. Returns exit code if finished, None otherwise.
+
+<ResponseField name="exit_code" type="Optional[int]">
+  Exit code if finished, None if still running.
+</ResponseField>
+
+### sandbox.exec
+
+```python
+sandbox.exec(
+    *args: str,
+    pty: bool = False,
+) -> ContainerProcess
+```
+
+Execute a command in the running sandbox.
+
+<ParamField path="args" type="str" required>
+  Command and arguments to execute.
+</ParamField>
+
+<ParamField path="pty" type="bool" default="False">
+  Enable PTY for the exec session.
+</ParamField>
+
+<ResponseField name="process" type="ContainerProcess">
+  Process handle for the executed command.
+</ResponseField>
+
+**Example:**
+
+```python
+sb = modal.Sandbox.create("sleep", "infinity", app=app)
+process = sb.exec("echo", "hello")
+stdout = process.stdout.read()
+print(stdout)  # "hello"
+```
+
+## Properties
+
+### sandbox.stdin
+
+```python
+sandbox.stdin -> StreamWriter
+```
+
+Stream for writing to the sandbox's stdin.
+
+### sandbox.stdout
+
+```python
+sandbox.stdout -> StreamReader
+```
+
+Stream for reading from the sandbox's stdout.
+
+### sandbox.stderr
+
+```python
+sandbox.stderr -> StreamReader
+```
+
+Stream for reading from the sandbox's stderr.
+
+### sandbox.returncode
+
+```python
+sandbox.returncode -> Optional[int]
+```
+
+Return code of the sandbox if it has finished, None otherwise.

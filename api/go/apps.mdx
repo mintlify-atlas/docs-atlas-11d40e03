@@ -1,0 +1,92 @@
+---
+title: Apps
+description: Reference deployed Modal Apps in Go
+---
+
+Apps are the top-level organizational unit in Modal. They contain Functions, Classes, and other resources.
+
+## Referencing apps
+
+### FromName
+
+References an App by its name, optionally creating it if it doesn't exist.
+
+```go
+app, err := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+    CreateIfMissing: true,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the App
+</ParamField>
+
+<ParamField path="params" type="*AppFromNameParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name (e.g., "main", "dev"). Defaults to client's environment.
+  </ParamField>
+  
+  <ParamField path="CreateIfMissing" type="bool">
+    If true, creates the App if it doesn't exist. Defaults to false.
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*App` - The App instance
+- `error` - NotFoundError if the App doesn't exist and CreateIfMissing is false
+
+## App type
+
+The `App` type represents a deployed Modal App.
+
+<ResponseField name="AppID" type="string">
+  The unique identifier for the App
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  The name of the App
+</ResponseField>
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    // Reference an existing App
+    app, err := mc.Apps.FromName(ctx, "my-app", nil)
+    if err != nil {
+        fmt.Printf("App not found: %v\n", err)
+        return
+    }
+
+    fmt.Printf("App ID: %s\n", app.AppID)
+    fmt.Printf("App Name: %s\n", app.Name)
+
+    // Create an App if it doesn't exist
+    app2, _ := mc.Apps.FromName(ctx, "new-app", &modal.AppFromNameParams{
+        CreateIfMissing: true,
+    })
+    fmt.Printf("Created/Retrieved App: %s\n", app2.AppID)
+}
+```

@@ -1,0 +1,116 @@
+---
+title: TypeScript SDK overview
+description: Modal's TypeScript SDK provides convenient access to serverless cloud compute from JavaScript and TypeScript projects
+---
+
+The Modal TypeScript SDK provides convenient, on-demand access to serverless cloud compute on Modal from JavaScript and TypeScript projects. Use it to safely run arbitrary code in Modal Sandboxes, call Modal Functions, and interact with Modal resources.
+
+## Key features
+
+The Modal TypeScript SDK comes with built-in TypeScript type definitions and supports:
+
+- **Serverless sandboxes**: Create isolated execution environments with custom images, volumes, and secrets
+- **Function calling**: Invoke Modal Functions deployed with the Python SDK
+- **Resource management**: Work with Apps, Volumes, Queues, Secrets, and other Modal resources
+- **Custom images**: Build images from registries (Docker Hub, AWS ECR, GCP Artifact Registry) or with Dockerfile commands
+- **Telemetry and observability**: Add custom gRPC middleware for tracing and monitoring
+- **Full TypeScript support**: Type-safe APIs with comprehensive TypeScript definitions
+
+## What you can do
+
+### Run code in sandboxes
+
+Create isolated execution environments on-demand:
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("my-app", {
+  createIfMissing: true,
+});
+const image = modal.images.fromRegistry("alpine:3.21");
+
+const sb = await modal.sandboxes.create(app, image, {
+  command: ["echo", "Hello from Modal!"],
+});
+
+console.log(await sb.stdout.readText());
+await sb.terminate();
+```
+
+### Call deployed functions
+
+Invoke Modal Functions deployed with the Python SDK:
+
+```typescript
+const echo = await modal.functions.fromName(
+  "my-app",
+  "echo_string",
+);
+
+const result = await echo.remote(["Hello world!"]);
+console.log(result);
+```
+
+### Work with classes
+
+Call methods on Modal class instances:
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "MyClass");
+const instance = await cls.instance();
+const method = instance.method("process_data");
+
+const result = await method.remote([{ data: "value" }]);
+```
+
+### Build custom images
+
+Create images with Dockerfile commands and secrets:
+
+```typescript
+const image = modal.images
+  .fromRegistry("python:3.13")
+  .dockerfileCommands([
+    "RUN pip install numpy pandas",
+    "RUN apt-get update && apt-get install -y curl",
+  ]);
+
+const sb = await modal.sandboxes.create(app, image);
+```
+
+## Runtime support
+
+The Modal TypeScript SDK supports:
+
+- **Node.js**: Version 22 or later
+- **Module formats**: ES Modules and CommonJS (both `import` and `require()`)
+- **Runtimes**: Node.js, Deno, and Bun
+
+## Feature parity with Python SDK
+
+The TypeScript SDK is approaching feature parity with the [Modal Python SDK](https://github.com/modal-labs/modal-client), with some notable exceptions:
+
+- **Available**: Sandboxes, Functions, Classes, Images, Volumes, Queues, Secrets, Proxies
+- **Not yet available**: Defining Modal Functions, Volume filesystem API, some Image building APIs, Dicts
+
+Defining Modal Functions will likely remain exclusive to Python.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/typescript/installation">
+    Install the Modal TypeScript SDK
+  </Card>
+  <Card title="Basic usage" icon="code" href="/typescript/basic-usage">
+    Learn basic patterns and workflows
+  </Card>
+  <Card title="Client configuration" icon="gear" href="/typescript/client">
+    Configure authentication and settings
+  </Card>
+  <Card title="API reference" icon="book" href="https://modal-labs.github.io/libmodal/">
+    Explore the full API documentation
+  </Card>
+</CardGroup>

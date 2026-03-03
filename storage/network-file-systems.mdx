@@ -1,0 +1,234 @@
+---
+title: NetworkFileSystem
+description: Shared, writable file system for Modal functions (deprecated)
+---
+
+<Warning>
+`NetworkFileSystem` has been deprecated and will be removed in a future release. Use [Volume](/storage/volumes) instead for persistent file storage.
+</Warning>
+
+`NetworkFileSystem` provides a shared, writable file system accessible by one or more Modal functions. By attaching this file system as a mount to one or more functions, they can share and persist data with each other.
+
+## Basic usage
+
+```python
+import modal
+
+app = modal.App()
+nfs = modal.NetworkFileSystem.from_name("my-nfs", create_if_missing=True)
+
+@app.function(network_file_systems={"/root/foo": nfs})
+def f():
+    pass
+
+@app.function(network_file_systems={"/ root/goo": nfs})
+def g():
+    pass
+```
+
+## Creating a NetworkFileSystem
+
+### Reference by name
+
+```python
+nfs = modal.NetworkFileSystem.from_name("my-nfs", create_if_missing=True)
+
+@app.function(network_file_systems={"/data": nfs})
+def process():
+    pass
+```
+
+### Ephemeral NetworkFileSystem
+
+Create a temporary NetworkFileSystem that exists only within a context manager:
+
+```python
+with modal.NetworkFileSystem.ephemeral() as nfs:
+    assert nfs.listdir("/") == []
+```
+
+```python
+async with modal.NetworkFileSystem.ephemeral() as nfs:
+    assert await nfs.listdir("/") == []
+```
+
+## Managing files
+
+### Write files
+
+Write from a file object to a path on the network file system:
+
+```python
+nfs = modal.NetworkFileSystem.from_name("my-nfs")
+
+with open("local-file.txt", "rb") as f:
+    nfs.write_file("/remote/path.txt", f)
+```
+
+If the remote path ends with `/`, it's treated as a directory and the file is uploaded with its current name:
+
+```python
+with open("data.csv", "rb") as f:
+    nfs.write_file("/data/", f)  # Uploads to /data/data.csv
+```
+
+### Read files
+
+Read a file from the network file system:
+
+```python
+nfs = modal.NetworkFileSystem.from_name("my-nfs")
+
+for chunk in nfs.read_file("/path/to/file.txt"):
+    print(chunk)
+```
+
+### Add local files
+
+Upload a local file to the network file system:
+
+```python
+nfs.add_local_file("local-path.txt", "/remote/path.txt")
+```
+
+If `remote_path` is not specified, the file is uploaded to the root with its current name:
+
+```python
+nfs.add_local_file("data.csv")  # Uploads to /data.csv
+```
+
+### Add local directories
+
+Upload an entire local directory:
+
+```python
+nfs.add_local_dir("/local/directory", "/remote/directory")
+```
+
+### List files
+
+List all files in a directory:
+
+```python
+entries = nfs.listdir("/data")
+for entry in entries:
+    print(f"{entry.path}: {entry.size} bytes")
+```
+
+Iterate over files:
+
+```python
+for entry in nfs.iterdir("/data"):
+    print(entry.path)
+```
+
+### Remove files
+
+Remove a file or directory:
+
+```python
+nfs.remove_file("/path/to/file.txt")
+nfs.remove_file("/path/to/directory", recursive=True)
+```
+
+## Local scripting
+
+A `NetworkFileSystem` can be useful for local scripting scenarios:
+
+```python
+nfs = modal.NetworkFileSystem.from_name("my-network-file-system")
+for chunk in nfs.read_file("my_db_dump.csv"):
+    # Process chunk
+    pass
+```
+
+## CLI access
+
+You can also manage network file systems using the Modal CLI:
+
+```bash
+modal nfs --help
+```
+
+## Managing NetworkFileSystems
+
+### Delete a NetworkFileSystem
+
+```python
+await modal.NetworkFileSystem.delete("my-nfs")
+```
+
+<Warning>
+This deletes the entire NetworkFileSystem. Deletion is irreversible.
+</Warning>
+
+## API reference
+
+### NetworkFileSystem methods
+
+<ParamField path="write_file" type="method">
+  Write from a file object to a path, atomically. Will create any needed parent directories.
+  
+  **Parameters:**
+  - `remote_path` (str): Path on the network file system
+  - `fp` (BinaryIO): File object to read from
+  - `progress_cb` (callable, optional): Progress callback function
+  
+  **Returns:** int - Number of bytes written
+</ParamField>
+
+<ParamField path="read_file" type="method">
+  Read a file from the network file system. Yields bytes chunks.
+  
+  **Parameters:**
+  - `path` (str): Path to the file
+</ParamField>
+
+<ParamField path="add_local_file" type="method">
+  Upload a local file to the network file system.
+  
+  **Parameters:**
+  - `local_path` (str | Path): Local file path
+  - `remote_path` (str | PurePosixPath, optional): Remote path. Defaults to root with file's current name
+  - `progress_cb` (callable, optional): Progress callback function
+</ParamField>
+
+<ParamField path="add_local_dir" type="method">
+  Upload a local directory to the network file system.
+  
+  **Parameters:**
+  - `local_path` (str | Path): Local directory path
+  - `remote_path` (str | PurePosixPath, optional): Remote path. Defaults to root with directory's current name
+  - `progress_cb` (callable, optional): Progress callback function
+</ParamField>
+
+<ParamField path="listdir" type="method">
+  List all files in a directory. Returns a list of `FileEntry` objects.
+  
+  **Parameters:**
+  - `path` (str): Directory path, file path, or glob pattern
+</ParamField>
+
+<ParamField path="iterdir" type="method">
+  Iterate over all files in a directory. Yields `FileEntry` objects.
+  
+  **Parameters:**
+  - `path` (str): Directory path, file path, or glob pattern
+</ParamField>
+
+<ParamField path="remove_file" type="method">
+  Remove a file or directory.
+  
+  **Parameters:**
+  - `path` (str): Path to remove
+  - `recursive` (bool): If True, remove directories recursively. Default: False
+</ParamField>
+
+### FileEntry
+
+The `FileEntry` dataclass represents a file or directory entry:
+
+- `path` (str): File path
+- `type` (FileEntryType): FILE, DIRECTORY, SYMLINK, FIFO, or SOCKET
+- `mtime` (int): Modification time
+- `size` (int): File size in bytes

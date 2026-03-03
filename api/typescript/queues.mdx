@@ -1,0 +1,392 @@
+---
+title: Queues
+description: Distributed FIFO queues for data flow in Modal Apps
+---
+
+Queues provide distributed, FIFO (First-In-First-Out) queues for managing data flow between Modal Functions and Sandboxes.
+
+## Access the Queues API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const queue = await modal.queues.fromName("my-queue");
+```
+
+## Methods
+
+### `modal.queues.fromName(name, params?)`
+
+Reference a Queue by name.
+
+<ParamField path="name" type="string" required>
+  Name of the Queue.
+</ParamField>
+
+<ParamField path="params" type="QueueFromNameParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+    
+    <ParamField path="createIfMissing" type="boolean" optional>
+      If `true`, creates the Queue if it doesn't exist.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Queue>">
+  The Queue object.
+</ResponseField>
+
+```typescript
+const queue = await modal.queues.fromName("tasks", {
+  createIfMissing: true,
+});
+```
+
+### `modal.queues.ephemeral(params?)`
+
+Create a temporary, nameless Queue. It persists until `closeEphemeral()` is called.
+
+<ParamField path="params" type="QueueEphemeralParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Queue>">
+  The ephemeral Queue object.
+</ResponseField>
+
+```typescript
+const queue = await modal.queues.ephemeral();
+
+// Use the queue...
+
+queue.closeEphemeral(); // Clean up
+```
+
+### `modal.queues.delete(name, params?)`
+
+Delete a named Queue.
+
+<ParamField path="name" type="string" required>
+  Name of the Queue to delete.
+</ParamField>
+
+<ParamField path="params" type="QueueDeleteParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+    
+    <ParamField path="allowMissing" type="boolean" optional>
+      If `true`, don't throw an error if the Queue doesn't exist.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+await modal.queues.delete("old-queue");
+```
+
+<Warning>
+  Deletion is irreversible and will affect any Apps currently using the Queue.
+</Warning>
+
+## Queue object
+
+### Properties
+
+<ResponseField name="queueId" type="string">
+  Unique identifier for the Queue.
+</ResponseField>
+
+<ResponseField name="name" type="string | undefined">
+  Name of the Queue, if it was looked up by name.
+</ResponseField>
+
+### Methods
+
+#### `put(value, params?)`
+
+Add an item to the end of the Queue.
+
+<ParamField path="value" type="any" required>
+  The value to enqueue (will be serialized).
+</ParamField>
+
+<ParamField path="params" type="QueuePutParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="timeoutMs" type="number" optional>
+      How long to wait if the Queue is full in milliseconds (default: indefinite).
+    </ParamField>
+    
+    <ParamField path="partition" type="string" optional>
+      Partition to add item to (default partition if not set).
+    </ParamField>
+    
+    <ParamField path="partitionTtlMs" type="number" optional default="86400000">
+      TTL for the partition in milliseconds (default: 1 day).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+await queue.put("task-1");
+await queue.put({ id: 123, data: "example" });
+
+// With timeout
+await queue.put("task-2", { timeoutMs: 5000 });
+
+// Use a partition
+await queue.put("high-priority", { partition: "urgent" });
+```
+
+<Note>
+  If the Queue is full, this will retry with exponential backoff until `timeoutMs` is reached.
+</Note>
+
+#### `putMany(values, params?)`
+
+Add multiple items to the end of the Queue.
+
+<ParamField path="values" type="any[]" required>
+  Array of values to enqueue.
+</ParamField>
+
+<ParamField path="params" type="QueuePutManyParams" optional>
+  Same as `put` parameters.
+</ParamField>
+
+```typescript
+await queue.putMany(["task-1", "task-2", "task-3"]);
+```
+
+#### `get(params?)`
+
+Remove and return the next item from the Queue.
+
+<ParamField path="params" type="QueueGetParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="timeoutMs" type="number" optional>
+      How long to wait if the Queue is empty in milliseconds (default: indefinite).
+    </ParamField>
+    
+    <ParamField path="partition" type="string" optional>
+      Partition to fetch from (default partition if not set).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<any>">
+  The next item from the Queue.
+</ResponseField>
+
+```typescript
+const item = await queue.get();
+console.log(item);
+
+// With timeout
+try {
+  const item = await queue.get({ timeoutMs: 5000 });
+} catch (err) {
+  // QueueEmptyError if timeout is reached
+  console.log("Queue was empty");
+}
+```
+
+#### `getMany(n, params?)`
+
+Remove and return up to `n` items from the Queue.
+
+<ParamField path="n" type="number" required>
+  Maximum number of items to retrieve.
+</ParamField>
+
+<ParamField path="params" type="QueueGetManyParams" optional>
+  Same as `get` parameters.
+</ParamField>
+
+<ResponseField name="return" type="Promise<any[]>">
+  Array of items (may be fewer than `n` if Queue doesn't have enough items).
+</ResponseField>
+
+```typescript
+const items = await queue.getMany(10);
+console.log(`Got ${items.length} items`);
+```
+
+#### `len(params?)`
+
+Get the number of items in the Queue.
+
+<ParamField path="params" type="QueueLenParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="partition" type="string" optional>
+      Partition to compute length for.
+    </ParamField>
+    
+    <ParamField path="total" type="boolean" optional>
+      Return total length across all partitions.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<number>">
+  Number of items in the Queue.
+</ResponseField>
+
+```typescript
+const length = await queue.len();
+console.log(`Queue has ${length} items`);
+
+// Total across all partitions
+const totalLength = await queue.len({ total: true });
+```
+
+#### `clear(params?)`
+
+Remove all items from the Queue.
+
+<ParamField path="params" type="QueueClearParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="partition" type="string" optional>
+      Partition to clear.
+    </ParamField>
+    
+    <ParamField path="all" type="boolean" optional>
+      Clear all partitions.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+await queue.clear();
+
+// Clear all partitions
+await queue.clear({ all: true });
+```
+
+#### `iterate(params?)`
+
+Iterate through items in the Queue without removing them.
+
+<ParamField path="params" type="QueueIterateParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="itemPollTimeoutMs" type="number" optional default="0">
+      How long to wait between items before exiting iteration in milliseconds.
+    </ParamField>
+    
+    <ParamField path="partition" type="string" optional>
+      Partition to iterate.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="AsyncGenerator<any>">
+  An async iterator of items.
+</ResponseField>
+
+```typescript
+for await (const item of queue.iterate()) {
+  console.log(item);
+}
+
+// With timeout
+for await (const item of queue.iterate({ itemPollTimeoutMs: 1000 })) {
+  console.log(item);
+}
+```
+
+#### `closeEphemeral()`
+
+Delete an ephemeral Queue. Only works with ephemeral Queues.
+
+```typescript
+const queue = await modal.queues.ephemeral();
+// Use queue...
+queue.closeEphemeral();
+```
+
+## Example: Producer-consumer pattern
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const queue = await modal.queues.fromName("tasks", {
+  createIfMissing: true,
+});
+
+// Producer: Add tasks to queue
+for (let i = 0; i < 100; i++) {
+  await queue.put({ taskId: i, data: `task-${i}` });
+}
+
+console.log(`Added ${await queue.len()} tasks`);
+
+// Consumer: Process tasks
+while (true) {
+  try {
+    const task = await queue.get({ timeoutMs: 5000 });
+    console.log(`Processing task ${task.taskId}`);
+    // Process task...
+  } catch (err) {
+    console.log("No more tasks, done!");
+    break;
+  }
+}
+```
+
+## Example: Batch processing with partitions
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const queue = await modal.queues.fromName("priority-tasks", {
+  createIfMissing: true,
+});
+
+// Add tasks to different priority partitions
+await queue.putMany(
+  ["urgent-1", "urgent-2"],
+  { partition: "high" }
+);
+
+await queue.putMany(
+  ["normal-1", "normal-2", "normal-3"],
+  { partition: "normal" }
+);
+
+// Process high priority first
+const highPriority = await queue.getMany(10, { partition: "high" });
+console.log("High priority tasks:", highPriority);
+
+// Then normal priority
+const normalPriority = await queue.getMany(10, { partition: "normal" });
+console.log("Normal priority tasks:", normalPriority);
+```

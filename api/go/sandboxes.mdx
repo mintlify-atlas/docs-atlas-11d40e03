@@ -1,0 +1,503 @@
+---
+title: Sandboxes
+description: Create and manage Modal Sandboxes in Go
+---
+
+Sandboxes are interactive, stateful containers that allow you to execute commands and interact with a remote environment.
+
+## Creating sandboxes
+
+### Create
+
+Creates a new Sandbox in the specified App with the given Image.
+
+```go
+app, _ := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+    CreateIfMissing: true,
+})
+image := mc.Images.FromRegistry("python:3.11", nil)
+
+sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+    CPU:       2.0,
+    MemoryMiB: 2048,
+    Timeout:   10 * time.Minute,
+})
+if err != nil {
+    // Handle error
+}
+defer sb.Terminate(ctx, nil)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="app" type="*App" required>
+  The App to create the Sandbox in
+</ParamField>
+
+<ParamField path="image" type="*Image" required>
+  The Image to use for the Sandbox
+</ParamField>
+
+<ParamField path="params" type="*SandboxCreateParams">
+  Sandbox configuration options
+  
+  <ParamField path="CPU" type="float64">
+    CPU request in fractional cores
+  </ParamField>
+  
+  <ParamField path="CPULimit" type="float64">
+    Hard CPU limit in fractional cores
+  </ParamField>
+  
+  <ParamField path="MemoryMiB" type="int">
+    Memory request in MiB
+  </ParamField>
+  
+  <ParamField path="MemoryLimitMiB" type="int">
+    Hard memory limit in MiB
+  </ParamField>
+  
+  <ParamField path="GPU" type="string">
+    GPU configuration (e.g., "T4", "A100:2")
+  </ParamField>
+  
+  <ParamField path="Timeout" type="time.Duration">
+    Maximum lifetime. Defaults to 5 minutes.
+  </ParamField>
+  
+  <ParamField path="IdleTimeout" type="time.Duration">
+    Idle timeout before termination
+  </ParamField>
+  
+  <ParamField path="Workdir" type="string">
+    Working directory (absolute path)
+  </ParamField>
+  
+  <ParamField path="Command" type="[]string">
+    Command to run on startup
+  </ParamField>
+  
+  <ParamField path="Env" type="map[string]string">
+    Environment variables
+  </ParamField>
+  
+  <ParamField path="Secrets" type="[]*Secret">
+    Secrets to inject
+  </ParamField>
+  
+  <ParamField path="Volumes" type="map[string]*Volume">
+    Volume mount points
+  </ParamField>
+  
+  <ParamField path="CloudBucketMounts" type="map[string]*CloudBucketMount">
+    Cloud bucket mount points
+  </ParamField>
+  
+  <ParamField path="PTY" type="bool">
+    Enable PTY (pseudo-terminal)
+  </ParamField>
+  
+  <ParamField path="EncryptedPorts" type="[]int">
+    List of encrypted ports to tunnel (TLS)
+  </ParamField>
+  
+  <ParamField path="H2Ports" type="[]int">
+    List of HTTP/2 ports to tunnel
+  </ParamField>
+  
+  <ParamField path="UnencryptedPorts" type="[]int">
+    List of unencrypted ports to tunnel
+  </ParamField>
+  
+  <ParamField path="BlockNetwork" type="bool">
+    Block all network access
+  </ParamField>
+  
+  <ParamField path="CIDRAllowlist" type="[]string">
+    Allowed CIDR ranges (cannot be used with BlockNetwork)
+  </ParamField>
+  
+  <ParamField path="Cloud" type="string">
+    Cloud provider
+  </ParamField>
+  
+  <ParamField path="Regions" type="[]string">
+    Preferred regions
+  </ParamField>
+  
+  <ParamField path="Verbose" type="bool">
+    Enable verbose logging
+  </ParamField>
+  
+  <ParamField path="Proxy" type="*Proxy">
+    Modal Proxy to use
+  </ParamField>
+  
+  <ParamField path="Name" type="string">
+    Optional name (unique within the App)
+  </ParamField>
+  
+  <ParamField path="CustomDomain" type="string">
+    Custom domain for connections (Enterprise only)
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Sandbox` - The created Sandbox
+- `error` - Error if creation fails
+
+### FromID
+
+References a running Sandbox by its ID.
+
+```go
+sb, err := mc.Sandboxes.FromID(ctx, "sb-123abc")
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="sandboxID" type="string" required>
+  The Sandbox ID
+</ParamField>
+
+**Returns:**
+- `*Sandbox` - The Sandbox instance
+- `error` - NotFoundError if the Sandbox doesn't exist
+
+### FromName
+
+References a running Sandbox by name.
+
+```go
+sb, err := mc.Sandboxes.FromName(ctx, "my-app", "my-sandbox", nil)
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="appName" type="string" required>
+  The App name
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The Sandbox name
+</ParamField>
+
+<ParamField path="params" type="*SandboxFromNameParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Sandbox` - The Sandbox instance
+- `error` - NotFoundError if the Sandbox doesn't exist
+
+### List
+
+Lists Sandboxes, optionally filtered by App or tags.
+
+```go
+iter, err := mc.Sandboxes.List(ctx, &modal.SandboxListParams{
+    AppID: "ap-123abc",
+    Tags:  map[string]string{"env": "prod"},
+})
+if err != nil {
+    // Handle error
+}
+
+for sb, err := range iter {
+    if err != nil {
+        // Handle error
+        break
+    }
+    fmt.Printf("Sandbox: %s\n", sb.SandboxID)
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*SandboxListParams">
+  Filtering options
+  
+  <ParamField path="AppID" type="string">
+    Filter by App ID
+  </ParamField>
+  
+  <ParamField path="Tags" type="map[string]string">
+    Filter by tags (must match all)
+  </ParamField>
+  
+  <ParamField path="Environment" type="string">
+    Environment name
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `iter.Seq2[*Sandbox, error]` - Iterator over Sandboxes
+- `error` - Error if the request fails
+
+## Sandbox methods
+
+### Exec
+
+Executes a command in the Sandbox and returns a ContainerProcess.
+
+```go
+p, err := sb.Exec(ctx, []string{"python", "script.py"}, &modal.SandboxExecParams{
+    Workdir: "/app",
+    Env:     map[string]string{"DEBUG": "1"},
+})
+if err != nil {
+    // Handle error
+}
+
+stdout, _ := io.ReadAll(p.Stdout)
+fmt.Printf("Output: %s\n", stdout)
+
+exitCode, _ := p.Wait(ctx)
+fmt.Printf("Exit code: %d\n", exitCode)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="command" type="[]string" required>
+  Command and arguments to execute
+</ParamField>
+
+<ParamField path="params" type="*SandboxExecParams">
+  Execution options
+  
+  <ParamField path="Stdout" type="StdioBehavior">
+    "pipe" or "ignore" (default: "pipe")
+  </ParamField>
+  
+  <ParamField path="Stderr" type="StdioBehavior">
+    "pipe" or "ignore" (default: "pipe")
+  </ParamField>
+  
+  <ParamField path="Workdir" type="string">
+    Working directory for the command
+  </ParamField>
+  
+  <ParamField path="Timeout" type="time.Duration">
+    Execution timeout
+  </ParamField>
+  
+  <ParamField path="Env" type="map[string]string">
+    Environment variables
+  </ParamField>
+  
+  <ParamField path="Secrets" type="[]*Secret">
+    Secrets to inject
+  </ParamField>
+  
+  <ParamField path="PTY" type="bool">
+    Enable PTY
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*ContainerProcess` - Handle to the running process
+  - `Stdin` (io.WriteCloser) - Standard input
+  - `Stdout` (io.ReadCloser) - Standard output
+  - `Stderr` (io.ReadCloser) - Standard error
+  - `Wait(ctx)` (int, error) - Wait for process to complete
+- `error` - Error if execution fails
+
+### Terminate
+
+Stops the Sandbox.
+
+```go
+exitCode, err := sb.Terminate(ctx, &modal.SandboxTerminateParams{
+    Wait: true,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*SandboxTerminateParams">
+  Termination options
+  
+  <ParamField path="Wait" type="bool">
+    Wait for the Sandbox to exit and return exit code
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `int` - Exit code (if Wait is true)
+- `error` - Error if termination fails
+
+### Wait
+
+Blocks until the Sandbox exits.
+
+```go
+exitCode, err := sb.Wait(ctx)
+fmt.Printf("Sandbox exited with code: %d\n", exitCode)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+**Returns:**
+- `int` - Exit code
+- `error` - Error if waiting fails
+
+### Poll
+
+Checks if the Sandbox has finished running.
+
+```go
+exitCode, err := sb.Poll(ctx)
+if exitCode == nil {
+    fmt.Println("Still running")
+} else {
+    fmt.Printf("Exited with code: %d\n", *exitCode)
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+**Returns:**
+- `*int` - Exit code if finished, nil if still running
+- `error` - Error if the request fails
+
+### Tunnels
+
+Gets tunnel metadata for the Sandbox's exposed ports.
+
+```go
+tunnels, err := sb.Tunnels(ctx, 30*time.Second)
+if err != nil {
+    // Handle error
+}
+
+for port, tunnel := range tunnels {
+    fmt.Printf("Port %d: %s\n", port, tunnel.URL())
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="timeout" type="time.Duration" required>
+  Timeout to wait for tunnels to be ready
+</ParamField>
+
+**Returns:**
+- `map[int]*Tunnel` - Map of container port to Tunnel
+  - `Host` (string) - Public hostname
+  - `Port` (int) - Public port
+  - `URL()` (string) - HTTPS URL
+  - `TLSSocket()` (string, int) - TLS socket
+  - `TCPSocket()` (string, int, error) - TCP socket
+- `error` - SandboxTimeoutError if tunnels aren't ready
+
+### SnapshotFilesystem
+
+Snapshots the Sandbox's filesystem to an Image.
+
+```go
+image, err := sb.SnapshotFilesystem(ctx, 5*time.Minute)
+if err != nil {
+    // Handle error
+}
+fmt.Printf("Snapshot image: %s\n", image.ImageID)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="timeout" type="time.Duration" required>
+  Timeout for the snapshot operation
+</ParamField>
+
+**Returns:**
+- `*Image` - The snapshot Image
+- `error` - Error if snapshot fails
+
+### Detach
+
+Disconnects from the Sandbox, cleaning up local resources.
+
+```go
+err := sb.Detach()
+if err != nil {
+    // Handle error
+}
+```
+
+**Returns:**
+- `error` - Error if detachment fails
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "io"
+    "time"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    app, _ := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+        CreateIfMissing: true,
+    })
+    image := mc.Images.FromRegistry("python:3.11", nil)
+
+    // Create a Sandbox
+    sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+        Timeout: 10 * time.Minute,
+    })
+    if err != nil {
+        panic(err)
+    }
+    defer sb.Terminate(ctx, nil)
+
+    // Execute a command
+    p, _ := sb.Exec(ctx, []string{"python", "-c", "print('Hello from Modal!')"}, nil)
+    stdout, _ := io.ReadAll(p.Stdout)
+    fmt.Printf("Output: %s\n", stdout)
+
+    exitCode, _ := p.Wait(ctx)
+    fmt.Printf("Exit code: %d\n", exitCode)
+}
+```

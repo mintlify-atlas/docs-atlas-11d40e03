@@ -1,0 +1,267 @@
+---
+title: modal.Dict
+description: API reference for Modal Dict class
+---
+
+Distributed dictionary for storage in Modal apps.
+
+Dict contents can be essentially any object so long as they can be serialized by `cloudpickle`. This includes other Modal objects.
+
+## Lifetime
+
+An individual Dict entry will expire after 7 days of inactivity (no reads or writes). Dict entries are written to durable storage.
+
+## Usage
+
+```python
+from modal import Dict
+
+my_dict = Dict.from_name("my-persisted_dict", create_if_missing=True)
+
+my_dict["some key"] = "some value"
+my_dict[123] = 456
+
+assert my_dict["some key"] == "some value"
+assert my_dict[123] == 456
+```
+
+## Factory methods
+
+### Dict.from_name
+
+```python
+modal.Dict.from_name(
+    name: str,
+    *,
+    environment_name: Optional[str] = None,
+    create_if_missing: bool = False,
+    client: Optional[Client] = None,
+) -> Dict
+```
+
+Reference a named Dict, creating if necessary.
+
+<ParamField path="name" type="str" required>
+  Name of the Dict.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to look up the Dict in.
+</ParamField>
+
+<ParamField path="create_if_missing" type="bool" default="False">
+  Create the Dict if it doesn't exist.
+</ParamField>
+
+<ParamField path="client" type="Client">
+  Modal client to use.
+</ParamField>
+
+**Example:**
+
+```python
+d = modal.Dict.from_name("my-dict", create_if_missing=True)
+d[123] = 456
+```
+
+### Dict.ephemeral
+
+```python
+modal.Dict.ephemeral(
+    client: Optional[Client] = None,
+    environment_name: Optional[str] = None,
+) -> ContextManager[Dict]
+```
+
+Creates a new ephemeral Dict within a context manager.
+
+**Example:**
+
+```python
+with modal.Dict.ephemeral() as d:
+    d["foo"] = "bar"
+```
+
+## Properties
+
+### dict.name
+
+```python
+dict.name -> Optional[str]
+```
+
+Name of the Dict, if it has one.
+
+## Methods
+
+### Standard dict operations
+
+Modal Dict supports standard Python dict operations:
+
+```python
+d["key"] = "value"  # Set item
+value = d["key"]     # Get item
+del d["key"]         # Delete item
+"key" in d           # Check membership
+len(d)               # Get length
+```
+
+### dict.get
+
+```python
+dict.get(
+    key: Any,
+    default: Any = None,
+) -> Any
+```
+
+Get value for key, returning default if key doesn't exist.
+
+<ParamField path="key" type="Any" required>
+  Key to look up.
+</ParamField>
+
+<ParamField path="default" type="Any">
+  Default value to return if key not found.
+</ParamField>
+
+### dict.put
+
+```python
+dict.put(
+    key: Any,
+    value: Any,
+)
+```
+
+Set a key-value pair.
+
+This method can be safely called in async contexts using `.aio`.
+
+<ParamField path="key" type="Any" required>
+  Key to set.
+</ParamField>
+
+<ParamField path="value" type="Any" required>
+  Value to set.
+</ParamField>
+
+### dict.contains
+
+```python
+dict.contains(
+    key: Any,
+) -> bool
+```
+
+Check if a key exists in the Dict.
+
+<ParamField path="key" type="Any" required>
+  Key to check.
+</ParamField>
+
+<ResponseField name="exists" type="bool">
+  True if key exists, False otherwise.
+</ResponseField>
+
+### dict.pop
+
+```python
+dict.pop(
+    key: Any,
+    default: Any = ...,
+) -> Any
+```
+
+Remove and return value for key.
+
+<ParamField path="key" type="Any" required>
+  Key to remove.
+</ParamField>
+
+<ParamField path="default" type="Any">
+  Default value if key not found.
+</ParamField>
+
+### dict.clear
+
+```python
+dict.clear()
+```
+
+Remove all items from the Dict.
+
+### dict.update
+
+```python
+dict.update(
+    items: Union[dict, Iterable[tuple[Any, Any]]],
+)
+```
+
+Update Dict with items from another dict or iterable.
+
+## Manager methods
+
+### Dict.objects.create
+
+```python
+modal.Dict.objects.create(
+    name: str,
+    *,
+    allow_existing: bool = False,
+    environment_name: Optional[str] = None,
+    client: Optional[Client] = None,
+) -> None
+```
+
+Create a new Dict object.
+
+**Example:**
+
+```python
+modal.Dict.objects.create("my-dict")
+```
+
+### Dict.objects.list
+
+```python
+modal.Dict.objects.list(
+    *,
+    max_objects: Optional[int] = None,
+    created_before: Optional[Union[datetime, str]] = None,
+    environment_name: str = "",
+    client: Optional[Client] = None,
+) -> list[Dict]
+```
+
+Return a list of hydrated Dict objects.
+
+### Dict.objects.delete
+
+```python
+modal.Dict.objects.delete(
+    name: str,
+    *,
+    allow_missing: bool = False,
+    environment_name: Optional[str] = None,
+    client: Optional[Client] = None,
+)
+```
+
+Delete a named Dict.
+
+<Warning>
+This deletes an *entire Dict*, not just a specific key. Deletion is irreversible.
+</Warning>
+
+## Async methods
+
+All methods have async equivalents with the `.aio` suffix:
+
+- `dict.get.aio(key, default=None)`
+- `dict.put.aio(key, value)`
+- `dict.contains.aio(key)`
+- `dict.pop.aio(key, default=...)`
+- `dict.clear.aio()`
+- `dict.update.aio(items)`

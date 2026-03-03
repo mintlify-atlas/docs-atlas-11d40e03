@@ -1,0 +1,327 @@
+---
+title: modal.App
+description: API reference for Modal App class
+---
+
+A Modal App is a group of functions and classes that are deployed together.
+
+The App serves at least three purposes:
+
+- A unit of deployment for functions and classes
+- Syncing of identities of functions and classes across processes
+- Managing log collection for everything that happens inside your code
+
+## Constructor
+
+```python
+modal.App(
+    name: Optional[str] = None,
+    *,
+    tags: Optional[dict[str, str]] = None,
+    image: Optional[Image] = None,
+    secrets: Sequence[Secret] = [],
+    volumes: dict[Union[str, PurePosixPath], Volume] = {},
+    include_source: bool = True,
+)
+```
+
+Construct a new app, optionally with default image, mounts, secrets, or volumes.
+
+<ParamField path="name" type="str">
+  Optional name for the App. Used when deploying.
+</ParamField>
+
+<ParamField path="tags" type="dict[str, str]">
+  Additional metadata to set on the App.
+</ParamField>
+
+<ParamField path="image" type="Image">
+  Default Image for all Functions in the App. Defaults to `modal.Image.debian_slim()`.
+</ParamField>
+
+<ParamField path="secrets" type="Sequence[Secret]">
+  Secrets to add for all Functions in the App.
+</ParamField>
+
+<ParamField path="volumes" type="dict[Union[str, PurePosixPath], Volume]">
+  Volume mounts to use for all Functions. Keys are mount paths, values are Volume objects.
+</ParamField>
+
+<ParamField path="include_source" type="bool" default="True">
+  Default configuration for adding Function source file(s) to the Modal container.
+</ParamField>
+
+**Example:**
+
+```python
+image = modal.Image.debian_slim().pip_install(...)
+secret = modal.Secret.from_name("my-secret")
+volume = modal.Volume.from_name("my-data")
+app = modal.App(
+    image=image,
+    secrets=[secret],
+    volumes={"/mnt/data": volume}
+)
+```
+
+## Properties
+
+### app.name
+
+```python
+app.name -> Optional[str]
+```
+
+The user-provided name of the App.
+
+### app.app_id
+
+```python
+app.app_id -> Optional[str]
+```
+
+Return the app_id of a running or stopped app.
+
+### app.description
+
+```python
+app.description -> Optional[str]
+```
+
+The App's `name`, if available, or a fallback descriptive identifier.
+
+## Methods
+
+### App.lookup
+
+```python
+modal.App.lookup(
+    name: str,
+    *,
+    client: Optional[Client] = None,
+    environment_name: Optional[str] = None,
+    create_if_missing: bool = False,
+) -> App
+```
+
+Look up an App with a given name, creating a new App if necessary.
+
+<ParamField path="name" type="str" required>
+  Name of the App to look up.
+</ParamField>
+
+<ParamField path="client" type="Client">
+  Optional Modal client to use. Defaults to the current environment client.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to look up the App in. Defaults to the current environment.
+</ParamField>
+
+<ParamField path="create_if_missing" type="bool" default="False">
+  If True, create the App if it doesn't exist.
+</ParamField>
+
+<ResponseField name="app" type="App">
+  The looked up or created App instance.
+</ResponseField>
+
+**Example:**
+
+```python
+app = modal.App.lookup("my-app", create_if_missing=True)
+modal.Sandbox.create("echo", "hi", app=app)
+```
+
+### app.run
+
+```python
+app.run(
+    *,
+    client: Optional[Client] = None,
+    detach: bool = False,
+    interactive: bool = False,
+    environment_name: Optional[str] = None,
+) -> ContextManager[App]
+```
+
+Context manager that runs an ephemeral app on Modal.
+
+Use this as the main entry point for your Modal application. All calls to Modal Functions should be made within the scope of this context manager.
+
+<ParamField path="client" type="Client">
+  Optional Modal client to use.
+</ParamField>
+
+<ParamField path="detach" type="bool" default="False">
+  If True, return immediately without waiting for the app to finish.
+</ParamField>
+
+<ParamField path="interactive" type="bool" default="False">
+  If True, run in interactive mode.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to run the app in.
+</ParamField>
+
+**Example:**
+
+```python
+with app.run():
+    some_modal_function.remote()
+```
+
+To enable output printing (to see App logs), use `modal.enable_output()`:
+
+```python
+with modal.enable_output():
+    with app.run():
+        some_modal_function.remote()
+```
+
+### app.deploy
+
+```python
+app.deploy(
+    *,
+    name: Optional[str] = None,
+    environment_name: Optional[str] = None,
+    tag: str = "",
+    client: Optional[Client] = None,
+) -> App
+```
+
+Deploy the App so that it is available persistently.
+
+Deployed Apps will be available for lookup or web-based invocations until they are stopped. Unlike with `app.run()`, this method will return as soon as the deployment completes.
+
+<ParamField path="name" type="str">
+  Name for the deployment, overriding any set on the App.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to deploy the App in.
+</ParamField>
+
+<ParamField path="tag" type="str">
+  Optional metadata that is specific to this deployment.
+</ParamField>
+
+<ParamField path="client" type="Client">
+  Alternate client to use for communication with the server.
+</ParamField>
+
+<ResponseField name="app" type="App">
+  The deployed App instance.
+</ResponseField>
+
+**Example:**
+
+```python
+app = modal.App("my-app")
+with modal.enable_output():
+    app.deploy()
+```
+
+## Decorators
+
+### @app.function
+
+```python
+@app.function(
+    image: Optional[Image] = None,
+    schedule: Optional[Schedule] = None,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    gpu: GPU_T = None,
+    network_file_systems: dict[Union[str, PurePosixPath], NetworkFileSystem] = {},
+    volumes: dict[Union[str, PurePosixPath], Union[Volume, CloudBucketMount]] = {},
+    cpu: Optional[Union[float, tuple[float, float]]] = None,
+    memory: Optional[Union[int, tuple[int, int]]] = None,
+    ephemeral_disk: Optional[int] = None,
+    min_containers: Optional[int] = None,
+    max_containers: Optional[int] = None,
+    buffer_containers: Optional[int] = None,
+    scaledown_window: Optional[int] = None,
+    proxy: Optional[Proxy] = None,
+    retries: Optional[Union[int, Retries]] = None,
+    timeout: int = 300,
+    startup_timeout: Optional[int] = None,
+    name: Optional[str] = None,
+    is_generator: Optional[bool] = None,
+    cloud: Optional[str] = None,
+    region: Optional[Union[str, Sequence[str]]] = None,
+    nonpreemptible: bool = False,
+    enable_memory_snapshot: bool = False,
+    block_network: bool = False,
+    restrict_modal_access: bool = False,
+    single_use_containers: bool = False,
+    include_source: Optional[bool] = None,
+)
+```
+
+Decorator to register a new Modal Function with this App.
+
+See the [Function reference](/api/python/function) for detailed parameter documentation.
+
+### @app.cls
+
+```python
+@app.cls(...)
+```
+
+Decorator to register a new Modal Cls with this App.
+
+See the [Cls reference](/api/python/cls) for detailed parameter documentation.
+
+### @app.local_entrypoint
+
+```python
+@app.local_entrypoint(
+    *,
+    name: Optional[str] = None,
+)
+```
+
+Decorate a function to be used as a CLI entrypoint for a Modal App.
+
+These functions run locally to set up the app and act as an entrypoint to start Modal functions from.
+
+<ParamField path="name" type="str">
+  Optional name for the entrypoint. Defaults to the function name.
+</ParamField>
+
+**Example:**
+
+```python
+@app.local_entrypoint()
+def main():
+    some_modal_function.remote()
+```
+
+You can call the function using `modal run` directly from the CLI:
+
+```shell
+modal run app_module.py
+```
+
+If you have multiple `local_entrypoint` functions, qualify the name:
+
+```shell
+modal run app_module.py::app.some_other_function
+```
+
+Entrypoint functions that take arguments with primitive types will automatically parse them as CLI options:
+
+```python
+@app.local_entrypoint()
+def main(foo: int, bar: str):
+    some_modal_function.remote(foo, bar)
+```
+
+Call with:
+
+```shell
+modal run app_module.py --foo 1 --bar "hello"
+```

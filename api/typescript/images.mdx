@@ -1,0 +1,273 @@
+---
+title: Images
+description: Create and manage container images for Modal Sandboxes and Functions
+---
+
+Images define the container environment for your Modal Sandboxes and Functions. The Images API provides methods to reference existing container images or build custom images.
+
+## Access the Images API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const image = modal.images.fromRegistry("python:3.13");
+```
+
+## Methods
+
+### `modal.images.fromRegistry(tag, secret?)`
+
+Create an Image from a container registry tag.
+
+<ParamField path="tag" type="string" required>
+  The registry tag for the image (e.g., `"python:3.13"`, `"nginx:alpine"`).
+</ParamField>
+
+<ParamField path="secret" type="Secret" optional>
+  Optional Secret containing credentials for private registry authentication.
+</ParamField>
+
+<ResponseField name="return" type="Image">
+  An Image object that can be built or used directly.
+</ResponseField>
+
+```typescript
+// Public image
+const image = modal.images.fromRegistry("alpine:3.21");
+
+// Private registry with authentication
+const secret = await modal.secrets.fromName("docker-hub-secret");
+const image = modal.images.fromRegistry("myorg/private-image:latest", secret);
+```
+
+### `modal.images.fromAwsEcr(tag, secret)`
+
+Create an Image from AWS Elastic Container Registry (ECR).
+
+<ParamField path="tag" type="string" required>
+  The ECR image tag.
+</ParamField>
+
+<ParamField path="secret" type="Secret" required>
+  Secret containing AWS credentials for ECR authentication.
+</ParamField>
+
+<ResponseField name="return" type="Image">
+  An Image object.
+</ResponseField>
+
+```typescript
+const awsSecret = await modal.secrets.fromName("aws-credentials");
+const image = modal.images.fromAwsEcr(
+  "123456789.dkr.ecr.us-east-1.amazonaws.com/my-image:latest",
+  awsSecret
+);
+```
+
+### `modal.images.fromGcpArtifactRegistry(tag, secret)`
+
+Create an Image from Google Cloud Platform Artifact Registry.
+
+<ParamField path="tag" type="string" required>
+  The GCP Artifact Registry image tag.
+</ParamField>
+
+<ParamField path="secret" type="Secret" required>
+  Secret containing GCP credentials for authentication.
+</ParamField>
+
+<ResponseField name="return" type="Image">
+  An Image object.
+</ResponseField>
+
+```typescript
+const gcpSecret = await modal.secrets.fromName("gcp-credentials");
+const image = modal.images.fromGcpArtifactRegistry(
+  "us-docker.pkg.dev/my-project/my-repo/my-image:latest",
+  gcpSecret
+);
+```
+
+### `modal.images.fromId(imageId)`
+
+Create an Image from an existing Image ID.
+
+<ParamField path="imageId" type="string" required>
+  The Modal Image ID.
+</ParamField>
+
+<ResponseField name="return" type="Promise<Image>">
+  The referenced Image object.
+</ResponseField>
+
+```typescript
+const image = await modal.images.fromId("im-123456");
+```
+
+### `modal.images.delete(imageId, params?)`
+
+Delete an Image by ID. This operation is irreversible.
+
+<ParamField path="imageId" type="string" required>
+  The ID of the Image to delete.
+</ParamField>
+
+<ParamField path="params" type="ImageDeleteParams" optional>
+  Optional parameters (currently empty).
+</ParamField>
+
+```typescript
+await modal.images.delete("im-123456");
+```
+
+<Warning>
+  Deletion is irreversible and will prevent Functions/Sandboxes from using the Image. Only the image with the specified ID is deleted, not intermediate layers.
+</Warning>
+
+## Image object
+
+The `Image` object represents a container image that can be built or used with Sandboxes.
+
+### Properties
+
+<ResponseField name="imageId" type="string">
+  Unique identifier for the Image. Empty string if not yet built.
+</ResponseField>
+
+### Methods
+
+#### `dockerfileCommands(commands, params?)`
+
+Extend an image with arbitrary Dockerfile-like commands. Each call creates a new Image layer.
+
+<ParamField path="commands" type="string[]" required>
+  Array of Dockerfile commands (e.g., `["RUN pip install numpy", "ENV LANG=en_US.UTF-8"]`).
+</ParamField>
+
+<ParamField path="params" type="ImageDockerfileCommandsParams" optional>
+  Build configuration for this layer
+  
+  <Expandable title="properties">
+    <ParamField path="env" type="Record<string, string>" optional>
+      Environment variables for the build environment.
+    </ParamField>
+    
+    <ParamField path="secrets" type="Secret[]" optional>
+      Secrets to make available during the build.
+    </ParamField>
+    
+    <ParamField path="gpu" type="string" optional>
+      GPU to use for building (e.g., `"A100"`, `"T4:2"`).
+    </ParamField>
+    
+    <ParamField path="forceBuild" type="boolean" optional>
+      Ignore cached builds for this layer (similar to `docker build --no-cache`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Image">
+  A new Image object with the additional layer.
+</ResponseField>
+
+```typescript
+const image = modal.images
+  .fromRegistry("python:3.13-slim")
+  .dockerfileCommands([
+    "RUN apt-get update && apt-get install -y git",
+    "RUN pip install numpy pandas",
+  ])
+  .dockerfileCommands(
+    ["RUN pip install torch torchvision"],
+    { gpu: "A100" } // Use GPU for this layer
+  );
+```
+
+<Note>
+  `COPY` commands that copy from local context are not yet supported. Only `COPY --from=` is allowed.
+</Note>
+
+#### `build(app)`
+
+Eagerly build the Image on Modal.
+
+<ParamField path="app" type="App" required>
+  The App context to use for building.
+</ParamField>
+
+<ResponseField name="return" type="Promise<Image>">
+  The built Image with an assigned `imageId`.
+</ResponseField>
+
+```typescript
+const app = await modal.apps.fromName("my-app", { createIfMissing: true });
+
+const image = modal.images
+  .fromRegistry("python:3.13")
+  .dockerfileCommands(["RUN pip install fastapi uvicorn"]);
+
+// Build the image
+const builtImage = await image.build(app);
+console.log(`Image built with ID: ${builtImage.imageId}`);
+```
+
+## Example: Build a custom Python image
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("ml-app", {
+  createIfMissing: true,
+});
+
+// Build a custom image with ML dependencies
+const image = modal.images
+  .fromRegistry("python:3.13-slim")
+  .dockerfileCommands([
+    "RUN apt-get update",
+    "RUN apt-get install -y build-essential",
+  ])
+  .dockerfileCommands([
+    "RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118",
+  ], {
+    gpu: "A100", // Build with GPU for CUDA compatibility
+  })
+  .dockerfileCommands([
+    "RUN pip install transformers datasets",
+    "ENV TRANSFORMERS_CACHE=/cache",
+  ]);
+
+// Build and use the image
+const builtImage = await image.build(app);
+
+const sandbox = await modal.sandboxes.create(app, builtImage, {
+  gpu: "A100",
+  command: ["python", "train.py"],
+});
+```
+
+## Example: Use a private registry
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+// Create a secret for Docker Hub authentication
+const dockerSecret = await modal.secrets.fromObject({
+  DOCKER_USERNAME: "myusername",
+  DOCKER_PASSWORD: "mypassword",
+});
+
+// Use a private image
+const image = modal.images.fromRegistry(
+  "myorg/private-image:v1.0",
+  dockerSecret
+);
+
+const app = await modal.apps.fromName("my-app", { createIfMissing: true });
+const sandbox = await modal.sandboxes.create(app, image);
+```

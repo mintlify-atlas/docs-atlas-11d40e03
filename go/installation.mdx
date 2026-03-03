@@ -1,0 +1,89 @@
+---
+title: Installation and setup
+description: Install and configure the Modal Go SDK
+---
+
+## Installation
+
+Install the latest version of the Modal Go SDK:
+
+```bash
+go get -u github.com/modal-labs/modal-client/go
+```
+
+Import it in your Go application:
+
+```go
+import modal "github.com/modal-labs/modal-client/go"
+```
+
+<Note>
+The Go SDK requires Go 1.23 or later.
+</Note>
+
+## Authentication
+
+You need to authenticate with Modal before using the SDK. There are two ways to authenticate:
+
+<Steps>
+
+### Using the Modal CLI
+
+Install the Modal CLI and run the setup command:
+
+```bash
+pip install modal
+modal setup
+```
+
+This creates a `~/.modal.toml` file with your credentials.
+
+### Using environment variables
+
+For machine environments (CI/CD, containers, etc.), set these environment variables:
+
+```bash
+export MODAL_TOKEN_ID=ak-YOUR_TOKEN_ID
+export MODAL_TOKEN_SECRET=as-YOUR_TOKEN_SECRET
+```
+
+<Warning>
+Replace the example values with your actual token credentials from [modal.com/settings](https://modal.com/settings).
+</Warning>
+
+</Steps>
+
+## Package reference
+
+The Go SDK is available at:
+
+- **Package**: `github.com/modal-labs/modal-client/go`
+- **Documentation**: [pkg.go.dev/github.com/modal-labs/modal-client/go](https://pkg.go.dev/github.com/modal-labs/modal-client/go)
+
+## Module information
+
+The Modal Go SDK uses the following module:
+
+```go
+module github.com/modal-labs/modal-client/go
+
+go 1.24.0
+```
+
+## Telemetry and observability
+
+The Modal Go SDK supports custom gRPC interceptors for telemetry, tracing, and observability. You can add custom unary and stream interceptors to:
+
+- Measure API call latency
+- Trace requests across your system
+- Integrate with observability tools like OpenTelemetry, DataDog, and others
+
+See the [telemetry example](https://github.com/modal-labs/modal-client/blob/main/go/examples/telemetry/main.go) for implementation details.
+
+## Next steps
+
+Now that you have the SDK installed and configured:
+
+- Learn about [basic usage patterns](/go/basic-usage)
+- Understand [client initialization](/go/client)
+- Explore the [examples on GitHub](https://github.com/modal-labs/modal-client/tree/main/go/examples)

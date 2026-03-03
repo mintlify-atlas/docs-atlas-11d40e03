@@ -1,0 +1,248 @@
+---
+title: Decorator functions
+description: API reference for Modal decorator functions
+---
+
+Modal provides several decorator functions for modifying function and method behavior.
+
+## @modal.method
+
+```python
+@modal.method(
+    *,
+    is_generator: Optional[bool] = None,
+)
+```
+
+Decorator for methods within a `@app.cls()` class.
+
+Marks a method as a Modal method that can be called remotely.
+
+<ParamField path="is_generator" type="bool">
+  Explicitly mark whether the method is a generator. Auto-detected if not specified.
+</ParamField>
+
+**Example:**
+
+```python
+@app.cls()
+class MyModel:
+    @modal.method()
+    def predict(self, x):
+        return x * 2
+
+result = MyModel().predict.remote(21)  # Returns 42
+```
+
+## @modal.enter
+
+```python
+@modal.enter(
+    *,
+    snap: bool = False,
+)
+```
+
+Decorator for lifecycle methods that run when a container starts.
+
+Can be used with both classes and functions.
+
+<ParamField path="snap" type="bool" default="False">
+  If True, method runs before snapshotting (requires `enable_memory_snapshot=True`).
+</ParamField>
+
+**Example:**
+
+```python
+@app.cls()
+class MyService:
+    @modal.enter()
+    def startup(self):
+        print("Container starting up")
+        self.model = load_model()
+    
+    @modal.method()
+    def predict(self, x):
+        return self.model.predict(x)
+```
+
+## @modal.exit
+
+```python
+@modal.exit()
+```
+
+Decorator for lifecycle methods that run when a container shuts down.
+
+**Example:**
+
+```python
+@app.cls()
+class MyService:
+    @modal.exit()
+    def shutdown(self):
+        print("Container shutting down")
+        self.cleanup()
+```
+
+## @modal.build
+
+```python
+@modal.build()
+```
+
+Decorator for methods that run during image build time.
+
+Useful for downloading models or other build-time setup.
+
+**Example:**
+
+```python
+@app.cls()
+class MyModel:
+    @modal.build()
+    def download_model(self):
+        # This runs during image build
+        download_weights()
+```
+
+## @modal.web_endpoint
+
+```python
+@modal.web_endpoint(
+    method: str = "GET",
+    label: Optional[str] = None,
+    docs: bool = False,
+)
+```
+
+Decorator to create a web endpoint from a function.
+
+<ParamField path="method" type="str" default="GET">
+  HTTP method (GET, POST, PUT, DELETE, etc.).
+</ParamField>
+
+<ParamField path="label" type="str">
+  Custom label for the endpoint URL.
+</ParamField>
+
+<ParamField path="docs" type="bool" default="False">
+  Enable automatic API documentation.
+</ParamField>
+
+**Example:**
+
+```python
+@app.function()
+@modal.web_endpoint(method="POST")
+def my_endpoint(data: dict):
+    return {"result": process(data)}
+```
+
+## @modal.asgi_app
+
+```python
+@modal.asgi_app()
+```
+
+Decorator to serve an ASGI application (e.g., FastAPI, Starlette).
+
+**Example:**
+
+```python
+from fastapi import FastAPI
+
+web_app = FastAPI()
+
+@web_app.get("/hello")
+def hello():
+    return {"message": "Hello World"}
+
+@app.function()
+@modal.asgi_app()
+def fastapi_app():
+    return web_app
+```
+
+## @modal.wsgi_app
+
+```python
+@modal.wsgi_app()
+```
+
+Decorator to serve a WSGI application (e.g., Flask, Django).
+
+**Example:**
+
+```python
+from flask import Flask
+
+web_app = Flask(__name__)
+
+@web_app.route("/")
+def home():
+    return "Hello World"
+
+@app.function()
+@modal.wsgi_app()
+def flask_app():
+    return web_app
+```
+
+## @modal.concurrent
+
+```python
+@modal.concurrent(
+    *,
+    max_inputs: int,
+    target_inputs: Optional[int] = None,
+)
+```
+
+Decorator to enable concurrent input processing for a function or class.
+
+<ParamField path="max_inputs" type="int" required>
+  Maximum number of concurrent inputs per container.
+</ParamField>
+
+<ParamField path="target_inputs" type="int">
+  Target number of concurrent inputs for autoscaling.
+</ParamField>
+
+**Example:**
+
+```python
+@app.function()
+@modal.concurrent(max_inputs=100)
+async def process(item):
+    await async_work(item)
+```
+
+## @modal.batched
+
+```python
+@modal.batched(
+    max_batch_size: int,
+    wait_ms: int,
+)
+```
+
+Decorator to enable automatic batching of inputs.
+
+<ParamField path="max_batch_size" type="int" required>
+  Maximum batch size.
+</ParamField>
+
+<ParamField path="wait_ms" type="int" required>
+  Maximum time to wait for a batch in milliseconds.
+</ParamField>
+
+**Example:**
+
+```python
+@app.function()
+@modal.batched(max_batch_size=32, wait_ms=100)
+def predict_batch(items: list):
+    # items is a list of inputs
+    return model.predict(items)
+```

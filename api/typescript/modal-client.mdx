@@ -1,0 +1,178 @@
+---
+title: ModalClient
+description: The main client for interacting with Modal's cloud infrastructure
+---
+
+The `ModalClient` class is the primary entry point for all interactions with Modal's cloud services. It provides access to all Modal resources through service properties.
+
+## Constructor
+
+### `new ModalClient(params?)`
+
+Creates a new Modal client instance.
+
+<ParamField path="params" type="ModalClientParams" optional>
+  Configuration options for the client
+  
+  <Expandable title="properties">
+    <ParamField path="tokenId" type="string" optional>
+      Modal API token ID. If not provided, uses `MODAL_TOKEN_ID` environment variable or value from `.modal.toml`.
+    </ParamField>
+    
+    <ParamField path="tokenSecret" type="string" optional>
+      Modal API token secret. If not provided, uses `MODAL_TOKEN_SECRET` environment variable or value from `.modal.toml`.
+    </ParamField>
+    
+    <ParamField path="environment" type="string" optional>
+      Environment name to use. Defaults to the workspace default environment.
+    </ParamField>
+    
+    <ParamField path="endpoint" type="string" optional>
+      Custom server endpoint URL.
+    </ParamField>
+    
+    <ParamField path="timeoutMs" type="number" optional>
+      Default timeout for API calls in milliseconds.
+    </ParamField>
+    
+    <ParamField path="maxRetries" type="number" optional>
+      Maximum number of retries for transient failures.
+    </ParamField>
+    
+    <ParamField path="logger" type="Logger" optional>
+      Custom logger instance.
+    </ParamField>
+    
+    <ParamField path="logLevel" type="LogLevel" optional>
+      Log level: `"debug"`, `"info"`, `"warn"`, or `"error"`. Defaults to `"warn"`.
+    </ParamField>
+    
+    <ParamField path="grpcMiddleware" type="ClientMiddleware[]" optional>
+      Custom gRPC middleware for advanced observability. These are appended after Modal's built-in middleware.
+      
+      <Note>
+        The Modal gRPC API is not considered a public API and can change without warning.
+      </Note>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+import { ModalClient } from "modal";
+
+// Use default credentials from environment or .modal.toml
+const modal = new ModalClient();
+
+// Or provide explicit credentials
+const modal = new ModalClient({
+  tokenId: "ak-...",
+  tokenSecret: "as-...",
+  environment: "staging",
+});
+```
+
+## Service properties
+
+The `ModalClient` instance provides access to all Modal services through the following properties:
+
+<ResponseField name="apps" type="AppService">
+  Service for managing Apps. See [Apps API](/api/typescript/apps).
+</ResponseField>
+
+<ResponseField name="functions" type="FunctionService">
+  Service for managing Functions. See [Functions API](/api/typescript/functions).
+</ResponseField>
+
+<ResponseField name="cls" type="ClsService">
+  Service for managing Classes. See [Cls API](/api/typescript/cls).
+</ResponseField>
+
+<ResponseField name="images" type="ImageService">
+  Service for managing container images. See [Images API](/api/typescript/images).
+</ResponseField>
+
+<ResponseField name="sandboxes" type="SandboxService">
+  Service for managing Sandboxes. See [Sandboxes API](/api/typescript/sandboxes).
+</ResponseField>
+
+<ResponseField name="volumes" type="VolumeService">
+  Service for managing persistent Volumes. See [Volumes API](/api/typescript/volumes).
+</ResponseField>
+
+<ResponseField name="queues" type="QueueService">
+  Service for managing distributed Queues. See [Queues API](/api/typescript/queues).
+</ResponseField>
+
+<ResponseField name="secrets" type="SecretService">
+  Service for managing Secrets. See [Secrets API](/api/typescript/secrets).
+</ResponseField>
+
+<ResponseField name="functionCalls" type="FunctionCallService">
+  Service for managing Function calls.
+</ResponseField>
+
+<ResponseField name="proxies" type="ProxyService">
+  Service for managing Proxies.
+</ResponseField>
+
+<ResponseField name="cloudBucketMounts" type="CloudBucketMountService">
+  Service for managing cloud bucket mounts.
+</ResponseField>
+
+## Methods
+
+### `close()`
+
+Closes the client and cleans up resources. After calling this method, the client should not be used.
+
+```typescript
+const modal = new ModalClient();
+
+// Use the client...
+
+modal.close();
+```
+
+### `version()`
+
+Returns the SDK version string.
+
+<ResponseField name="return" type="string">
+  The version of the Modal JavaScript SDK.
+</ResponseField>
+
+```typescript
+const modal = new ModalClient();
+console.log(modal.version()); // e.g., "0.5.0"
+```
+
+## Example usage
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+// Get or create an app
+const app = await modal.apps.fromName("my-app", {
+  createIfMissing: true,
+});
+
+// Create an image from a registry
+const image = modal.images.fromRegistry("python:3.13");
+
+// Create a sandbox
+const sb = await modal.sandboxes.create(app, image, {
+  timeoutMs: 300000,
+  memoryMiB: 2048,
+});
+
+// Execute a command
+const proc = await sb.exec(["python", "--version"]);
+const output = await proc.stdout.readText();
+console.log(output);
+
+// Clean up
+await sb.terminate();
+modal.close();
+```

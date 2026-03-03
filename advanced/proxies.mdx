@@ -1,0 +1,375 @@
+---
+title: Proxies
+description: Get static outbound IP addresses for your Modal containers with Proxy objects
+---
+
+## Overview
+
+Proxy objects give your Modal containers a static outbound IP address. This is essential when connecting to external services that require IP whitelisting, such as databases, APIs, or third-party services.
+
+<Note>
+Proxies must be provisioned through the Modal Dashboard and cannot be created programmatically from code.
+</Note>
+
+## Creating a proxy
+
+Proxies are created and managed through the Modal Dashboard:
+
+<Steps>
+
+### Navigate to the Proxies page
+
+Go to your workspace settings in the Modal Dashboard.
+
+### Create a new proxy
+
+Click "Create Proxy" and configure your proxy settings.
+
+### Note the proxy name
+
+You'll use this name to reference the proxy in your code.
+
+### Whitelist the IP address
+
+Add the proxy's static IP address to your external service's whitelist.
+
+</Steps>
+
+## Using a proxy
+
+Reference a proxy by name in your Modal application:
+
+```python
+import modal
+
+app = modal.App()
+
+# Reference the proxy by name
+proxy = modal.Proxy.from_name("my-database-proxy")
+
+@app.function(proxy=proxy)
+def connect_to_database():
+    import psycopg2
+    
+    # All outbound connections from this function will use the proxy IP
+    conn = psycopg2.connect(
+        host="restricted-database.example.com",
+        port=5432,
+        user="myuser",
+        password="mypassword",
+        database="mydb"
+    )
+    
+    # Query the database
+    cursor = conn.cursor()
+    cursor.execute("SELECT version();")
+    version = cursor.fetchone()
+    print(f"Database version: {version}")
+    
+    conn.close()
+```
+
+## Reference by name
+
+The `Proxy.from_name()` method creates a reference to a proxy:
+
+```python
+# Basic usage
+proxy = modal.Proxy.from_name("my-proxy")
+
+# With explicit environment
+proxy = modal.Proxy.from_name(
+    "my-proxy",
+    environment_name="production"
+)
+
+# With custom client
+from modal import Client
+client = Client.from_env()
+proxy = modal.Proxy.from_name("my-proxy", client=client)
+```
+
+### Parameters
+
+- `name` (required): The name of the proxy as configured in the Dashboard
+- `environment_name` (optional): The Modal environment (defaults to current environment)
+- `client` (optional): Custom Modal client instance
+
+## Using with functions
+
+Attach a proxy to individual functions:
+
+```python
+import modal
+
+app = modal.App()
+proxy = modal.Proxy.from_name("api-proxy")
+
+@app.function(proxy=proxy)
+def call_external_api():
+    import requests
+    
+    # This request will originate from the proxy's static IP
+    response = requests.get("https://api.example.com/data")
+    return response.json()
+```
+
+## Using with classes
+
+Apply a proxy to all methods in a class:
+
+```python
+import modal
+
+app = modal.App()
+proxy = modal.Proxy.from_name("database-proxy")
+
+@app.cls(proxy=proxy)
+class DatabaseClient:
+    @modal.method()
+    def query(self, sql: str):
+        # All methods in this class use the proxy
+        import psycopg2
+        conn = psycopg2.connect(...)
+        # Execute query
+        ...
+    
+    @modal.method()
+    def insert(self, data: dict):
+        # Also uses the proxy
+        ...
+```
+
+## Multiple proxies
+
+Use different proxies for different services:
+
+```python
+import modal
+
+app = modal.App()
+
+db_proxy = modal.Proxy.from_name("postgres-proxy")
+api_proxy = modal.Proxy.from_name("api-proxy")
+
+@app.function(proxy=db_proxy)
+def query_database():
+    # Uses database proxy IP
+    ...
+
+@app.function(proxy=api_proxy)
+def call_api():
+    # Uses API proxy IP
+    ...
+```
+
+## Environment-specific proxies
+
+Use different proxies per environment:
+
+```python
+import modal
+import os
+
+app = modal.App()
+
+# Select proxy based on environment
+env = os.environ.get("MODAL_ENVIRONMENT", "dev")
+
+if env == "production":
+    proxy = modal.Proxy.from_name(
+        "prod-database-proxy",
+        environment_name="production"
+    )
+else:
+    proxy = modal.Proxy.from_name(
+        "dev-database-proxy",
+        environment_name="dev"
+    )
+
+@app.function(proxy=proxy)
+def connect():
+    # Uses environment-appropriate proxy
+    ...
+```
+
+## Verifying proxy usage
+
+Check that your traffic is using the proxy IP:
+
+```python
+import modal
+
+app = modal.App()
+proxy = modal.Proxy.from_name("my-proxy")
+
+@app.function(proxy=proxy)
+def check_ip():
+    import requests
+    
+    # Check outbound IP address
+    response = requests.get("https://api.ipify.org?format=json")
+    ip_address = response.json()["ip"]
+    
+    print(f"Outbound IP: {ip_address}")
+    # This should match your proxy's static IP
+    
+    return ip_address
+```
+
+## Common use cases
+
+### Database with IP whitelist
+
+```python
+import modal
+
+app = modal.App()
+db_proxy = modal.Proxy.from_name("rds-proxy")
+
+@app.function(
+    proxy=db_proxy,
+    secrets=[modal.Secret.from_name("db-credentials")]
+)
+def query_rds(sql: str):
+    import os
+    import psycopg2
+    
+    conn = psycopg2.connect(
+        host=os.environ["DB_HOST"],
+        port=5432,
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        database=os.environ["DB_NAME"]
+    )
+    
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    results = cursor.fetchall()
+    conn.close()
+    
+    return results
+```
+
+### Third-party API with IP restrictions
+
+```python
+import modal
+
+app = modal.App()
+api_proxy = modal.Proxy.from_name("partner-api-proxy")
+
+@app.function(
+    proxy=api_proxy,
+    secrets=[modal.Secret.from_name("api-keys")]
+)
+def call_partner_api(endpoint: str):
+    import os
+    import requests
+    
+    response = requests.get(
+        f"https://partner-api.example.com/{endpoint}",
+        headers={"Authorization": f"Bearer {os.environ['API_KEY']}"}
+    )
+    
+    return response.json()
+```
+
+### Cloud storage with VPC restrictions
+
+```python
+import modal
+
+app = modal.App()
+storage_proxy = modal.Proxy.from_name("s3-vpc-proxy")
+
+@app.function(proxy=storage_proxy)
+def access_private_s3():
+    import boto3
+    
+    # Access S3 bucket with VPC endpoint restrictions
+    s3 = boto3.client('s3')
+    response = s3.list_objects_v2(Bucket='private-bucket')
+    
+    return [obj['Key'] for obj in response.get('Contents', [])]
+```
+
+## Best practices
+
+<Steps>
+
+### Create dedicated proxies
+
+Use separate proxies for different services to maintain clear IP whitelist boundaries:
+
+```python
+db_proxy = modal.Proxy.from_name("database-proxy")
+api_proxy = modal.Proxy.from_name("api-proxy")
+```
+
+### Use environment-specific proxies
+
+Maintain separate proxies for development, staging, and production environments.
+
+### Document IP addresses
+
+Keep a record of which proxy IPs are whitelisted where.
+
+### Monitor proxy usage
+
+Regularly verify that your proxies are being used correctly with IP check endpoints.
+
+### Combine with secrets
+
+Always use proxies together with Modal secrets for credentials:
+
+```python
+@app.function(
+    proxy=modal.Proxy.from_name("db-proxy"),
+    secrets=[modal.Secret.from_name("db-creds")]
+)
+def secure_database_access():
+    ...
+```
+
+</Steps>
+
+## Troubleshooting
+
+### Proxy not found
+
+If you get an error that the proxy doesn't exist:
+
+- Verify the proxy name in the Modal Dashboard
+- Check that you're using the correct environment
+- Ensure the proxy has been fully provisioned
+
+### Connection still blocked
+
+If your connection is still rejected:
+
+- Verify the proxy's IP address in the Dashboard
+- Confirm the IP is whitelisted in the external service
+- Check that the proxy is actually being used (use an IP check endpoint)
+- Ensure no firewall rules are blocking the connection
+
+### Performance considerations
+
+Proxies add minimal latency, but for optimal performance:
+
+- Place proxies in the same region as the target service
+- Use connection pooling in your application code
+- Monitor connection times and adjust as needed
+
+## Limitations
+
+- Proxies must be created through the Dashboard, not via code
+- Each workspace has a limit on the number of proxies
+- Proxy IPs cannot be changed after creation (create a new proxy instead)
+- Proxies are workspace-specific and cannot be shared across workspaces
+
+## Related resources
+
+- [Proxy guide](https://modal.com/docs/guide/proxy-ips)
+- [Secrets management](/guide/secrets)
+- [Networking guide](https://modal.com/docs/guide/networking)

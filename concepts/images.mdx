@@ -1,0 +1,408 @@
+---
+title: Images
+description: Learn how to create and customize container images for Modal Functions and Classes.
+---
+
+Modal **Images** define the container environment where your code runs. They let you install Python packages, system dependencies, and configure the runtime environment for your Functions and Classes.
+
+## Creating images
+
+Modal provides several base images to start from:
+
+```python
+import modal
+
+# Debian-based image (default)
+image = modal.Image.debian_slim()
+
+# Micromamba-based image for conda packages
+image = modal.Image.micromamba()
+
+# Use a custom Docker image
+image = modal.Image.from_registry("python:3.11-slim")
+```
+
+### Default image
+
+If you don't specify an image, Modal uses `modal.Image.debian_slim()` by default:
+
+```python
+app = modal.App()
+
+@app.function()  # Uses debian_slim by default
+def my_function():
+    pass
+```
+
+## Installing Python packages
+
+Add Python dependencies using `.pip_install()`:
+
+```python
+image = modal.Image.debian_slim().pip_install(
+    "numpy",
+    "pandas",
+    "scikit-learn"
+)
+```
+
+Install from a requirements file:
+
+```python
+image = modal.Image.debian_slim().pip_install_from_requirements("requirements.txt")
+```
+
+Install from pyproject.toml:
+
+```python
+image = modal.Image.debian_slim().pip_install_from_pyproject("pyproject.toml")
+```
+
+<CodeGroup>
+```python Single Packages
+image = modal.Image.debian_slim().pip_install("numpy", "pandas")
+```
+
+```python Requirements File
+image = modal.Image.debian_slim().pip_install_from_requirements(
+    "requirements.txt"
+)
+```
+
+```python Pyproject.toml
+image = modal.Image.debian_slim().pip_install_from_pyproject(
+    "pyproject.toml",
+    optional_dependencies=["dev", "test"]
+)
+```
+</CodeGroup>
+
+## Installing system packages
+
+Install system-level dependencies with `.apt_install()`:
+
+```python
+image = modal.Image.debian_slim().apt_install(
+    "ffmpeg",
+    "libpq-dev",
+    "curl"
+)
+```
+
+For complex setup, use `.run_commands()`:
+
+```python
+image = modal.Image.debian_slim().run_commands(
+    "apt-get update",
+    "apt-get install -y build-essential",
+    "curl -O https://example.com/installer.sh",
+    "bash installer.sh"
+)
+```
+
+<Warning>
+Commands in `.run_commands()` are executed during image build time, not at runtime. Use them for installation and setup, not for executing application logic.
+</Warning>
+
+## Conda and Micromamba
+
+Use Micromamba for conda package management:
+
+```python
+image = modal.Image.micromamba().micromamba_install(
+    "pytorch",
+    "torchvision",
+    channels=["pytorch", "conda-forge"]
+)
+```
+
+Combine conda and pip packages:
+
+```python
+image = (
+    modal.Image.micromamba()
+    .micromamba_install("cudatoolkit", "cudnn", channels=["conda-forge"])
+    .pip_install("transformers", "datasets")
+)
+```
+
+## Custom Dockerfiles
+
+Build from a Dockerfile:
+
+```python
+image = modal.Image.from_dockerfile("./Dockerfile")
+```
+
+With build arguments:
+
+```python
+image = modal.Image.from_dockerfile(
+    "./Dockerfile",
+    build_args={"PYTHON_VERSION": "3.11"}
+)
+```
+
+## Registry images
+
+Use pre-built images from Docker registries:
+
+```python
+# Docker Hub
+image = modal.Image.from_registry("nvidia/cuda:12.0.0-base-ubuntu22.04")
+
+# Private registry
+image = modal.Image.from_registry(
+    "myregistry.com/myimage:latest",
+    secret=modal.Secret.from_name("registry-credentials")
+)
+```
+
+<Info>
+When using registry images, Modal adds the Modal runtime dependencies automatically. This ensures Functions and Classes can communicate with Modal's infrastructure.
+</Info>
+
+## Copying files
+
+Add local files to the image:
+
+```python
+image = modal.Image.debian_slim().copy_local_file(
+    "./config.yaml",
+    "/root/config.yaml"
+)
+```
+
+Copy entire directories:
+
+```python
+image = modal.Image.debian_slim().copy_local_dir(
+    "./models",
+    "/root/models"
+)
+```
+
+## Environment variables
+
+Set environment variables in the image:
+
+```python
+image = modal.Image.debian_slim().env({
+    "PYTHONUNBUFFERED": "1",
+    "MODEL_PATH": "/root/models",
+    "LOG_LEVEL": "INFO"
+})
+```
+
+## Working directory
+
+Set the default working directory:
+
+```python
+image = modal.Image.debian_slim().workdir("/app")
+```
+
+## Python version
+
+Specify a Python version:
+
+```python
+# Use Python 3.11
+image = modal.Image.debian_slim(python_version="3.11")
+
+# Use a specific micro version
+image = modal.Image.debian_slim(python_version="3.11.7")
+```
+
+Supported Python versions depend on the image builder version. Modal currently supports Python 3.10, 3.11, 3.12, and 3.13.
+
+## Image builder versions
+
+Modal periodically releases new image builder versions with updated dependencies:
+
+```python
+image = modal.Image.debian_slim(builder_version="2024.10")
+```
+
+Available versions:
+- `"2023.12"` (deprecated)
+- `"2024.04"`
+- `"2024.10"` (current default)
+- `"2025.06"`
+- `"PREVIEW"` (experimental)
+
+<Note>
+Newer builder versions include updated system packages and Python dependencies. Use consistent builder versions across your images for reproducibility.
+</Note>
+
+## Chaining operations
+
+Image methods return new Image objects, so you can chain operations:
+
+```python
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git", "curl")
+    .pip_install("numpy", "pandas")
+    .env({"PYTHONUNBUFFERED": "1"})
+    .workdir("/app")
+)
+```
+
+## Using images with functions
+
+Assign images to Functions:
+
+```python
+image = modal.Image.debian_slim().pip_install("requests")
+
+app = modal.App()
+
+@app.function(image=image)
+def fetch_data(url: str):
+    import requests
+    return requests.get(url).json()
+```
+
+Set a default image for the entire App:
+
+```python
+image = modal.Image.debian_slim().pip_install("numpy", "pandas")
+
+app = modal.App(image=image)
+
+@app.function()  # Uses the app's default image
+def process_data():
+    import numpy as np
+    import pandas as pd
+    pass
+```
+
+## GPU images
+
+For GPU workloads, Modal automatically includes CUDA libraries:
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .pip_install("torch", "torchvision")
+)
+
+@app.function(image=image, gpu="A100")
+def train_model():
+    import torch
+    print(torch.cuda.is_available())  # True
+```
+
+For conda-based GPU setups:
+
+```python
+image = (
+    modal.Image.micromamba()
+    .micromamba_install(
+        "pytorch",
+        "torchvision",
+        "pytorch-cuda=12.1",
+        channels=["pytorch", "nvidia"]
+    )
+)
+```
+
+## Image caching
+
+Modal caches built images to speed up subsequent deployments. Images are rebuilt when:
+
+- The image definition changes
+- Dependencies are updated
+- Base images are updated
+
+<Tip>
+Structure your image builds with frequently-changing dependencies last to maximize cache hits:
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .apt_install("ffmpeg")              # Rarely changes
+    .pip_install("numpy", "pandas")     # Stable dependencies
+    .pip_install_from_requirements("requirements.txt")  # Your app deps
+)
+```
+</Tip>
+
+## Force rebuilds
+
+Force a complete image rebuild:
+
+```python
+image = modal.Image.debian_slim().pip_install("package", force_build=True)
+```
+
+## Best practices
+
+### Minimize image size
+
+Smaller images deploy faster:
+
+```python
+# Good: Only install what you need
+image = modal.Image.debian_slim().pip_install("requests")
+
+# Avoid: Installing unnecessary packages
+image = modal.Image.debian_slim().pip_install(
+    "requests", "numpy", "pandas", "scipy", "matplotlib"
+)  # Only if all are needed
+```
+
+### Pin dependency versions
+
+Pin versions for reproducibility:
+
+```python
+image = modal.Image.debian_slim().pip_install(
+    "numpy==1.24.3",
+    "pandas==2.0.2",
+    "scikit-learn==1.3.0"
+)
+```
+
+### Use requirements files for complex dependencies
+
+For projects with many dependencies, use requirements.txt:
+
+```python
+image = modal.Image.debian_slim().pip_install_from_requirements(
+    "requirements.txt"
+)
+```
+
+### Leverage image caching
+
+Order operations from least to most frequently changing:
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .apt_install("system-packages")     # Changes rarely
+    .pip_install("stable-dependencies")  # Changes occasionally  
+    .copy_local_dir("./src", "/app")   # Changes frequently
+)
+```
+
+### Reuse images across functions
+
+Define images once and reuse them:
+
+```python
+ml_image = (
+    modal.Image.debian_slim()
+    .pip_install("torch", "transformers", "datasets")
+)
+
+@app.function(image=ml_image)
+def train():
+    pass
+
+@app.function(image=ml_image)
+def evaluate():
+    pass
+```

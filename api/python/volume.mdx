@@ -1,0 +1,289 @@
+---
+title: modal.Volume
+description: API reference for Modal Volume class
+---
+
+A writeable volume that can be used to share files between one or more Modal functions.
+
+The contents of a volume is exposed as a filesystem. You can use it to share data between different functions, or to persist durable state across several instances of the same function.
+
+Unlike a networked filesystem, you need to explicitly reload the volume to see changes made since it was mounted. Similarly, you need to explicitly commit any changes you make to the volume for the changes to become visible outside the current container.
+
+## Usage
+
+```python
+import modal
+
+app = modal.App()
+volume = modal.Volume.from_name("my-persisted-volume", create_if_missing=True)
+
+@app.function(volumes={"/root/foo": volume})
+def f():
+    with open("/root/foo/bar.txt", "w") as f:
+        f.write("hello")
+    volume.commit()  # Persist changes
+
+@app.function(volumes={"/root/foo": volume})
+def g():
+    volume.reload()  # Fetch latest changes
+    with open("/root/foo/bar.txt", "r") as f:
+        print(f.read())
+```
+
+## Factory methods
+
+### Volume.from_name
+
+```python
+modal.Volume.from_name(
+    name: str,
+    *,
+    environment_name: Optional[str] = None,
+    create_if_missing: bool = False,
+    client: Optional[Client] = None,
+) -> Volume
+```
+
+Reference a Volume by name, creating if necessary.
+
+<ParamField path="name" type="str" required>
+  Name of the Volume.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to look up the Volume in.
+</ParamField>
+
+<ParamField path="create_if_missing" type="bool" default="False">
+  Create the Volume if it doesn't exist.
+</ParamField>
+
+<ParamField path="client" type="Client">
+  Modal client to use.
+</ParamField>
+
+<ResponseField name="volume" type="Volume">
+  The Volume instance.
+</ResponseField>
+
+**Example:**
+
+```python
+vol = modal.Volume.from_name("my-volume", create_if_missing=True)
+```
+
+### Volume.from_id
+
+```python
+modal.Volume.from_id(
+    volume_id: str,
+    client: Optional[Client] = None,
+) -> Volume
+```
+
+Construct a Volume from an ID.
+
+<ParamField path="volume_id" type="str" required>
+  ID of the Volume.
+</ParamField>
+
+## Properties
+
+### volume.name
+
+```python
+volume.name -> Optional[str]
+```
+
+Name of the Volume, if it has one.
+
+## Methods
+
+### volume.commit
+
+```python
+volume.commit()
+```
+
+Persist changes made to the volume.
+
+This must be called after writing files to make them visible to other containers.
+
+**Example:**
+
+```python
+@app.function(volumes={"/data": volume})
+def write_data():
+    with open("/data/output.txt", "w") as f:
+        f.write("results")
+    volume.commit()
+```
+
+### volume.reload
+
+```python
+volume.reload()
+```
+
+Fetch the latest changes to the volume.
+
+This must be called to see changes made by other containers.
+
+**Example:**
+
+```python
+@app.function(volumes={"/data": volume})
+def read_data():
+    volume.reload()
+    with open("/data/output.txt", "r") as f:
+        print(f.read())
+```
+
+### volume.listdir
+
+```python
+volume.listdir(
+    path: str,
+) -> list[FileEntry]
+```
+
+List files in a directory on the volume.
+
+<ParamField path="path" type="str" required>
+  Path to list (can include glob patterns).
+</ParamField>
+
+<ResponseField name="entries" type="list[FileEntry]">
+  List of file entries.
+</ResponseField>
+
+**Example:**
+
+```python
+entries = volume.listdir("/data")
+for entry in entries:
+    print(entry.path, entry.type, entry.size)
+```
+
+### volume.read_file
+
+```python
+volume.read_file(
+    path: str,
+) -> bytes
+```
+
+Read the contents of a file from the volume.
+
+<ParamField path="path" type="str" required>
+  Path to the file.
+</ParamField>
+
+<ResponseField name="contents" type="bytes">
+  File contents.
+</ResponseField>
+
+### volume.remove_file
+
+```python
+volume.remove_file(
+    path: str,
+    *,
+    recursive: bool = False,
+)
+```
+
+Remove a file or directory from the volume.
+
+<ParamField path="path" type="str" required>
+  Path to remove.
+</ParamField>
+
+<ParamField path="recursive" type="bool" default="False">
+  If True, remove directories recursively.
+</ParamField>
+
+### volume.read_only
+
+```python
+volume.read_only() -> Volume
+```
+
+Configure Volume to mount as read-only.
+
+<ResponseField name="volume" type="Volume">
+  New read-only Volume instance.
+</ResponseField>
+
+**Example:**
+
+```python
+volume = modal.Volume.from_name("my-volume", create_if_missing=True)
+
+@app.function(volumes={"/mnt/items": volume.read_only()})
+def f():
+    with open("/mnt/items/my-file.txt") as f:
+        return f.read()
+```
+
+## Manager methods
+
+### Volume.objects.create
+
+```python
+modal.Volume.objects.create(
+    name: str,
+    *,
+    allow_existing: bool = False,
+    environment_name: Optional[str] = None,
+    client: Optional[Client] = None,
+) -> None
+```
+
+Create a new Volume object.
+
+<ParamField path="name" type="str" required>
+  Name for the new Volume.
+</ParamField>
+
+<ParamField path="allow_existing" type="bool" default="False">
+  If True, no-op when the Volume already exists.
+</ParamField>
+
+**Example:**
+
+```python
+modal.Volume.objects.create("my-volume")
+```
+
+### Volume.objects.list
+
+```python
+modal.Volume.objects.list(
+    *,
+    max_objects: Optional[int] = None,
+    created_before: Optional[Union[datetime, str]] = None,
+    environment_name: str = "",
+    client: Optional[Client] = None,
+) -> list[Volume]
+```
+
+Return a list of hydrated Volume objects.
+
+### Volume.objects.delete
+
+```python
+modal.Volume.objects.delete(
+    name: str,
+    *,
+    allow_missing: bool = False,
+    environment_name: Optional[str] = None,
+    client: Optional[Client] = None,
+)
+```
+
+Delete a named Volume.
+
+<Warning>
+This deletes an *entire Volume*, not just a specific file. Deletion is irreversible.
+</Warning>

@@ -1,0 +1,88 @@
+---
+title: modal.Client
+description: API reference for Modal Client
+---
+
+The Modal client object is used to interact with the Modal API.
+
+<Note>
+The Client is not intended to be instantiated directly by users in most cases. Modal automatically manages client instances.
+</Note>
+
+## Factory methods
+
+### Client.from_env
+
+```python
+modal.Client.from_env() -> Client
+```
+
+Create a client from environment configuration.
+
+This is the standard way to get a Modal client. It uses credentials from the Modal config file or environment variables.
+
+<ResponseField name="client" type="Client">
+  The Modal client instance.
+</ResponseField>
+
+**Example:**
+
+```python
+client = modal.Client.from_env()
+```
+
+### Client.from_credentials
+
+```python
+modal.Client.from_credentials(
+    token_id: str,
+    token_secret: str,
+) -> Client
+```
+
+Constructor based on token credentials.
+
+Useful for managing Modal on behalf of third-party users.
+
+<ParamField path="token_id" type="str" required>
+  Modal token ID.
+</ParamField>
+
+<ParamField path="token_secret" type="str" required>
+  Modal token secret.
+</ParamField>
+
+<ResponseField name="client" type="Client">
+  The Modal client instance.
+</ResponseField>
+
+**Example:**
+
+```python
+client = modal.Client.from_credentials("my_token_id", "my_token_secret")
+modal.Sandbox.create("echo", "hi", client=client, app=app)
+```
+
+## Context manager usage
+
+The Client can be used as an async context manager:
+
+```python
+async with modal.Client.from_env() as client:
+    # Use client
+    pass
+```
+
+## Properties
+
+### client.stub
+
+```python
+client.stub -> ModalClientModal
+```
+
+The default stub for making RPC calls to Modal servers.
+
+<Note>
+This is an internal property primarily used by Modal's implementation.
+</Note>

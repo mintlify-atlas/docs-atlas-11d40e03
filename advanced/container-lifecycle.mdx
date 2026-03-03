@@ -1,0 +1,420 @@
+---
+title: Container lifecycle
+description: Control container initialization and cleanup with enter and exit lifecycle hooks
+---
+
+## Overview
+
+Modal provides lifecycle hooks that let you run code at specific points in a container's lifetime. These hooks are essential for managing resources, initializing services, and performing cleanup operations.
+
+## Lifecycle phases
+
+Modal containers go through several phases:
+
+1. **Container creation**: A new container is started
+2. **Pre-snapshot enter** (optional): Run once before container snapshot
+3. **Container snapshot** (optional): Container state is saved for fast cloning
+4. **Post-snapshot enter**: Run every time a container starts (or resumes from snapshot)
+5. **Function execution**: Your functions run
+6. **Container exit**: Run cleanup before container stops
+
+## Enter hook
+
+The `@modal.enter()` decorator marks methods that run when a container starts.
+
+### Basic usage
+
+```python
+import modal
+
+app = modal.App()
+
+@app.cls()
+class MyService:
+    @modal.enter()
+    def initialize(self):
+        print("Container is starting!")
+        self.connection = connect_to_database()
+    
+    @modal.method()
+    def process(self, data):
+        # Connection is already initialized
+        return self.connection.query(data)
+```
+
+### Pre-snapshot vs post-snapshot
+
+Use `snap=True` to run setup before the container is snapshot:
+
+```python
+@app.cls(enable_memory_snapshot=True)
+class MLModel:
+    @modal.enter(snap=True)
+    def load_model(self):
+        # Runs ONCE before snapshot
+        # Model is included in the snapshot for fast cold starts
+        import torch
+        self.model = torch.load("model.pt")
+        print("Model loaded into snapshot")
+    
+    @modal.enter()
+    def setup_runtime(self):
+        # Runs EVERY time container starts (after snapshot restore)
+        import os
+        self.request_id = os.urandom(16).hex()
+        print(f"Container started with ID: {self.request_id}")
+    
+    @modal.method()
+    def predict(self, data):
+        return self.model(data)
+```
+
+<Tip>
+Use `@modal.enter(snap=True)` for expensive one-time setup like loading large models. Use `@modal.enter()` (without snap) for per-container initialization like creating unique IDs or establishing connections.
+</Tip>
+
+### Multiple enter hooks
+
+You can have multiple enter hooks in the same class:
+
+```python
+@app.cls(enable_memory_snapshot=True)
+class ComplexService:
+    @modal.enter(snap=True)
+    def load_assets(self):
+        # Load static assets before snapshot
+        self.model = load_model()
+        self.tokenizer = load_tokenizer()
+    
+    @modal.enter(snap=True)
+    def compile_code(self):
+        # Compile code before snapshot
+        self.compiled = compile("optimized_code.py")
+    
+    @modal.enter()
+    def setup_connections(self):
+        # Create connections after snapshot
+        self.db = connect_to_db()
+        self.cache = connect_to_cache()
+```
+
+## Exit hook
+
+The `@modal.exit()` decorator marks methods that run when a container stops.
+
+### Basic usage
+
+```python
+@app.cls()
+class DatabaseClient:
+    @modal.enter()
+    def connect(self):
+        self.conn = connect_to_database()
+    
+    @modal.exit()
+    def disconnect(self):
+        print("Closing database connection")
+        self.conn.close()
+    
+    @modal.method()
+    def query(self, sql: str):
+        return self.conn.execute(sql)
+```
+
+### Cleanup operations
+
+Use exit hooks for resource cleanup:
+
+```python
+@app.cls()
+class FileProcessor:
+    @modal.enter()
+    def setup(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        self.files_created = []
+    
+    @modal.method()
+    def process(self, data):
+        filepath = f"{self.temp_dir}/data.txt"
+        self.files_created.append(filepath)
+        with open(filepath, "w") as f:
+            f.write(data)
+    
+    @modal.exit()
+    def cleanup(self):
+        import os
+        import shutil
+        
+        # Clean up temporary files
+        for filepath in self.files_created:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        
+        # Remove temp directory
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        print(f"Cleaned up {len(self.files_created)} files")
+```
+
+## HTTP server example
+
+A common pattern is running HTTP servers with lifecycle hooks:
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+
+image = (
+    modal.Image.debian_slim()
+    .apt_install("openssh-server")
+    .run_commands("mkdir /run/sshd")
+)
+
+@app._experimental_server(port=8000, proxy_regions=["us-east"])
+class MyServer:
+    @modal.enter()
+    def start(self):
+        # Start HTTP server subprocess
+        self.proc = subprocess.Popen(["python3", "-m", "http.server", "8000"])
+        print("HTTP server started")
+    
+    @modal.exit()
+    def stop(self):
+        # Gracefully stop the server
+        self.proc.terminate()
+        self.proc.wait(timeout=10)
+        print("HTTP server stopped")
+```
+
+<Note>
+The `@app._experimental_server()` decorator requires an `@modal.enter()` method to start the server. See the [server documentation](https://modal.com/docs/guide/lifecycle-functions) for more details.
+</Note>
+
+## Function-level lifecycle
+
+Lifecycle hooks work with `@app.function()` too:
+
+```python
+app = modal.App()
+
+@app.function()
+class Worker:
+    @modal.enter()
+    def setup(self):
+        print("Worker starting")
+        self.state = {"processed": 0}
+    
+    @modal.exit()
+    def teardown(self):
+        print(f"Worker stopping. Processed {self.state['processed']} items")
+    
+    def __call__(self, item):
+        self.state["processed"] += 1
+        return process(item)
+```
+
+## Advanced patterns
+
+### Lazy initialization
+
+Initialize resources only when needed:
+
+```python
+@app.cls()
+class LazyService:
+    def __init__(self):
+        self._db_connection = None
+    
+    @property
+    def db(self):
+        if self._db_connection is None:
+            self._db_connection = connect_to_database()
+        return self._db_connection
+    
+    @modal.exit()
+    def cleanup(self):
+        if self._db_connection is not None:
+            self._db_connection.close()
+    
+    @modal.method()
+    def query(self, sql: str):
+        # DB connection created on first use
+        return self.db.execute(sql)
+```
+
+### Shared state across methods
+
+Use enter hooks to initialize shared state:
+
+```python
+@app.cls()
+class StatefulService:
+    @modal.enter()
+    def initialize_state(self):
+        self.cache = {}
+        self.request_count = 0
+    
+    @modal.method()
+    def get_or_compute(self, key: str):
+        self.request_count += 1
+        
+        if key not in self.cache:
+            self.cache[key] = expensive_computation(key)
+        
+        return self.cache[key]
+    
+    @modal.method()
+    def stats(self):
+        return {
+            "requests": self.request_count,
+            "cache_size": len(self.cache)
+        }
+```
+
+### Resource pooling
+
+Create connection pools in enter hooks:
+
+```python
+@app.cls()
+class PooledClient:
+    @modal.enter()
+    def create_pool(self):
+        from multiprocessing import Pool
+        self.pool = Pool(processes=4)
+    
+    @modal.exit()
+    def close_pool(self):
+        self.pool.close()
+        self.pool.join()
+    
+    @modal.method()
+    def parallel_process(self, items: list):
+        return self.pool.map(process_item, items)
+```
+
+## Best practices
+
+<Steps>
+
+### Always pair enter and exit
+
+If you acquire a resource in `@modal.enter()`, release it in `@modal.exit()`:
+
+```python
+@modal.enter()
+def acquire_resource(self):
+    self.resource = acquire()
+
+@modal.exit()
+def release_resource(self):
+    self.resource.release()
+```
+
+### Use snap for expensive setup
+
+Load large models and assets with `snap=True`:
+
+```python
+@modal.enter(snap=True)
+def load_model(self):
+    # This runs once and is included in the snapshot
+    self.model = load_huge_model()
+```
+
+### Handle errors gracefully
+
+Exit hooks should handle cleanup even if errors occurred:
+
+```python
+@modal.exit()
+def cleanup(self):
+    try:
+        if hasattr(self, 'connection'):
+            self.connection.close()
+    except Exception as e:
+        print(f"Cleanup error: {e}")
+```
+
+### Keep enter hooks fast
+
+Minimize work in post-snapshot enter hooks to reduce cold start time:
+
+```python
+# ✓ Good - expensive work in snapshot
+@modal.enter(snap=True)
+def load_model(self):
+    self.model = load_huge_model()
+
+@modal.enter()
+def setup_runtime(self):
+    self.request_id = generate_id()  # Fast
+
+# ✗ Bad - expensive work after snapshot
+@modal.enter()
+def setup(self):
+    self.model = load_huge_model()  # Slow cold starts!
+```
+
+</Steps>
+
+## Requirements
+
+- Enter and exit methods must take no parameters (except `self` for class methods)
+- Lifecycle decorators cannot be combined with web interface decorators (`@modal.fastapi_endpoint`, `@modal.asgi_app`, etc.)
+- Lifecycle decorators cannot be combined with callable interface decorators when used incorrectly
+
+## Common errors
+
+### Async functions not supported
+
+```python
+# ✗ Incorrect - async not allowed
+@modal.enter()
+async def setup(self):
+    await initialize()
+
+# ✓ Correct - use sync functions
+@modal.enter()
+def setup(self):
+    initialize()
+```
+
+### Parameters not allowed
+
+```python
+# ✗ Incorrect - parameters not allowed
+@modal.enter()
+def setup(self, config):
+    self.config = config
+
+# ✓ Correct - no parameters
+@modal.enter()
+def setup(self):
+    self.config = load_config()
+```
+
+### Cannot apply to classes
+
+```python
+# ✗ Incorrect - can't apply to class
+@modal.enter()
+@app.cls()
+class MyClass:
+    pass
+
+# ✓ Correct - apply to methods
+@app.cls()
+class MyClass:
+    @modal.enter()
+    def setup(self):
+        pass
+```
+
+## Related resources
+
+- [Lifecycle functions guide](https://modal.com/docs/guide/lifecycle-functions)
+- [Memory snapshots guide](https://modal.com/docs/guide/cold-start)
+- [Class reference](/reference/modal.Cls)

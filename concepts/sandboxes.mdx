@@ -1,0 +1,437 @@
+---
+title: Sandboxes
+description: Learn how to use Modal Sandboxes for interactive code execution and long-running processes.
+---
+
+Modal **Sandboxes** provide an interactive way to run arbitrary code in a containerized environment. Unlike Functions, which execute a single task and terminate, Sandboxes give you a persistent container where you can execute multiple commands, stream I/O, and run long-lived processes.
+
+## Creating a sandbox
+
+Create a Sandbox with `modal.Sandbox.create()`:
+
+```python
+import modal
+
+app = modal.App.lookup("my-app", create_if_missing=True)
+sandbox = modal.Sandbox.create("echo", "Hello, world!", app=app)
+print(sandbox.stdout.read())
+sandbox.wait()
+```
+
+The first argument and any subsequent positional arguments form the command to execute.
+
+### Sandbox configuration
+
+Configure Sandboxes with the same options as Functions:
+
+```python
+sandbox = modal.Sandbox.create(
+    "python", "-c", "import torch; print(torch.cuda.is_available())",
+    app=app,
+    image=modal.Image.debian_slim().pip_install("torch"),
+    gpu="A100",
+    timeout=600,
+    secrets=[modal.Secret.from_name("my-secret")]
+)
+```
+
+<CodeGroup>
+```python Basic Execution
+sandbox = modal.Sandbox.create(
+    "python", "script.py",
+    app=app,
+    image=modal.Image.debian_slim().pip_install("numpy")
+)
+```
+
+```python With GPU
+sandbox = modal.Sandbox.create(
+    "nvidia-smi",
+    app=app,
+    gpu="A100"
+)
+```
+
+```python With Volumes
+sandbox = modal.Sandbox.create(
+    "ls", "/data",
+    app=app,
+    volumes={"/data": modal.Volume.from_name("my-data")}
+)
+```
+</CodeGroup>
+
+## Executing commands
+
+Once a Sandbox is created, execute additional commands with `.exec()`:
+
+```python
+sandbox = modal.Sandbox.create("bash", app=app, pty=True)
+
+# Execute a command
+process = sandbox.exec("ls", "-la")
+process.wait()
+print(process.stdout.read())
+
+# Execute another command in the same container
+process = sandbox.exec("pwd")
+print(process.stdout.read())
+```
+
+### Working directory
+
+Set the working directory for commands:
+
+```python
+sandbox = modal.Sandbox.create(
+    "bash",
+    app=app,
+    workdir="/app"
+)
+
+# Commands run in /app by default
+process = sandbox.exec("pwd")
+print(process.stdout.read())  # /app
+```
+
+## Streaming I/O
+
+Access stdout and stderr as they're produced:
+
+```python
+sandbox = modal.Sandbox.create("bash", "-c", "for i in {1..5}; do echo $i; sleep 1; done", app=app)
+
+# Stream output line by line
+for line in sandbox.stdout:
+    print(f"Output: {line}")
+
+sandbox.wait()
+```
+
+### Reading stderr
+
+Access stderr separately:
+
+```python
+sandbox = modal.Sandbox.create("bash", "-c", "echo error >&2", app=app)
+print("stdout:", sandbox.stdout.read())
+print("stderr:", sandbox.stderr.read())
+sandbox.wait()
+```
+
+## Interactive terminals
+
+Enable PTY (pseudo-terminal) support for interactive sessions:
+
+```python
+sandbox = modal.Sandbox.create(
+    "bash",
+    app=app,
+    pty=True
+)
+
+# Now you can send input
+sandbox.stdin.write("echo Hello\n")
+sandbox.stdin.write("exit\n")
+sandbox.stdin.drain()
+
+print(sandbox.stdout.read())
+sandbox.wait()
+```
+
+<Info>
+PTY mode is useful for running interactive programs like shells, REPLs, or text editors that expect a terminal.
+</Info>
+
+## Timeouts
+
+Set timeouts to prevent Sandboxes from running indefinitely:
+
+```python
+# Sandbox terminates after 300 seconds
+sandbox = modal.Sandbox.create(
+    "sleep", "1000",
+    app=app,
+    timeout=300
+)
+
+try:
+    sandbox.wait()
+except modal.exception.SandboxTimeoutError:
+    print("Sandbox timed out")
+```
+
+### Idle timeout
+
+Terminate Sandboxes that are idle:
+
+```python
+sandbox = modal.Sandbox.create(
+    "bash",
+    app=app,
+    timeout=3600,        # Maximum lifetime: 1 hour
+    idle_timeout=300     # Terminate after 5 minutes of inactivity
+)
+```
+
+## Network access
+
+### Opening ports
+
+Expose ports for network services:
+
+```python
+sandbox = modal.Sandbox.create(
+    "python", "-m", "http.server", "8000",
+    app=app,
+    encrypted_ports=[8000]
+)
+
+# Access the service via tunnel
+print(sandbox.tunnels())
+```
+
+### Blocking network
+
+Restrict network access:
+
+```python
+sandbox = modal.Sandbox.create(
+    "curl", "https://example.com",
+    app=app,
+    block_network=True  # This will fail
+)
+```
+
+Allow specific CIDRs:
+
+```python
+sandbox = modal.Sandbox.create(
+    "curl", "https://api.example.com",
+    app=app,
+    cidr_allowlist=["192.168.1.0/24", "10.0.0.0/8"]
+)
+```
+
+## File operations
+
+Interact with files in the Sandbox:
+
+```python
+# Create a sandbox
+sandbox = modal.Sandbox.create("bash", app=app, pty=True)
+
+# Write a file
+file = sandbox.open("/tmp/test.txt", "w")
+file.write("Hello, Sandbox!")
+file.close()
+
+# Read the file
+process = sandbox.exec("cat", "/tmp/test.txt")
+print(process.stdout.read())
+
+sandbox.terminate()
+```
+
+## Container snapshots
+
+Create snapshots for faster startup:
+
+```python
+sandbox = modal.Sandbox.create(
+    "bash",
+    app=app,
+    _experimental_enable_snapshot=True
+)
+
+# Perform setup
+setup = sandbox.exec("pip", "install", "some-package")
+setup.wait()
+
+# Create a snapshot
+snapshot = sandbox.snapshot()
+
+# Later, create new sandboxes from the snapshot
+fast_sandbox = modal.Sandbox.from_snapshot(
+    snapshot.object_id,
+    app=app
+)
+```
+
+<Warning>
+Snapshots are an experimental feature and the API may change.
+</Warning>
+
+## Lifecycle management
+
+### Waiting for completion
+
+Wait for a Sandbox to complete:
+
+```python
+sandbox = modal.Sandbox.create("sleep", "5", app=app)
+result = sandbox.wait()  # Blocks until completion
+print(f"Exit code: {result.returncode}")
+```
+
+### Polling status
+
+Check if a Sandbox is still running:
+
+```python
+sandbox = modal.Sandbox.create("sleep", "100", app=app)
+
+if sandbox.poll() is None:
+    print("Still running")
+else:
+    print("Completed")
+```
+
+### Terminating sandboxes
+
+Manually terminate a Sandbox:
+
+```python
+sandbox = modal.Sandbox.create("sleep", "1000", app=app)
+
+# Do some work...
+
+sandbox.terminate()
+```
+
+## Use cases
+
+### Running Jupyter notebooks
+
+```python
+sandbox = modal.Sandbox.create(
+    "jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser",
+    app=app,
+    image=modal.Image.debian_slim().pip_install("jupyter"),
+    encrypted_ports=[8888],
+    timeout=3600
+)
+
+print("Jupyter URL:", sandbox.tunnels()[8888].url)
+```
+
+### Interactive Python REPL
+
+```python
+sandbox = modal.Sandbox.create(
+    "python",
+    app=app,
+    image=modal.Image.debian_slim().pip_install("numpy", "pandas"),
+    pty=True
+)
+
+sandbox.stdin.write("import numpy as np\n")
+sandbox.stdin.write("print(np.__version__)\n")
+sandbox.stdin.write("exit()\n")
+sandbox.stdin.drain()
+
+print(sandbox.stdout.read())
+sandbox.wait()
+```
+
+### Building projects
+
+```python
+sandbox = modal.Sandbox.create(
+    "bash",
+    app=app,
+    image=modal.Image.debian_slim().apt_install("build-essential"),
+    workdir="/build",
+    volumes={"/build": modal.Volume.from_name("build-cache")}
+)
+
+# Run build commands
+make = sandbox.exec("make", "all")
+make.wait()
+
+if make.returncode == 0:
+    print("Build successful")
+else:
+    print("Build failed:", make.stderr.read())
+
+sandbox.terminate()
+```
+
+### Running tests
+
+```python
+sandbox = modal.Sandbox.create(
+    "pytest", "-v",
+    app=app,
+    image=modal.Image.debian_slim().pip_install("pytest"),
+    workdir="/tests",
+    timeout=600
+)
+
+sandbox.wait()
+print("Test output:", sandbox.stdout.read())
+```
+
+## Best practices
+
+### Always wait or terminate
+
+Ensure Sandboxes don't run indefinitely:
+
+```python
+sandbox = modal.Sandbox.create("bash", app=app)
+try:
+    # Do work...
+    sandbox.wait()
+finally:
+    sandbox.terminate()
+```
+
+### Use appropriate timeouts
+
+Set realistic timeouts based on expected execution time:
+
+```python
+# Short-lived task
+sandbox = modal.Sandbox.create(
+    "quick-command",
+    app=app,
+    timeout=60
+)
+
+# Long-running service
+sandbox = modal.Sandbox.create(
+    "server",
+    app=app,
+    timeout=3600,
+    idle_timeout=600
+)
+```
+
+### Handle I/O carefully
+
+Read output to prevent buffer overflow:
+
+```python
+sandbox = modal.Sandbox.create("command-with-lots-of-output", app=app)
+
+# Stream output instead of reading all at once
+for line in sandbox.stdout:
+    process_line(line)
+
+sandbox.wait()
+```
+
+### Use volumes for persistence
+
+Store data that should persist beyond the Sandbox lifetime:
+
+```python
+volume = modal.Volume.from_name("my-data", create_if_missing=True)
+
+sandbox = modal.Sandbox.create(
+    "process-data",
+    app=app,
+    volumes={"/data": volume}
+)
+```

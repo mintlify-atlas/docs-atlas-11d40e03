@@ -1,0 +1,230 @@
+---
+title: Volumes
+description: Work with Modal Volumes for persistent storage in Go
+---
+
+Volumes provide persistent, distributed file storage that can be shared across Modal Functions and Sandboxes.
+
+## Referencing volumes
+
+### FromName
+
+References a Volume by its name, optionally creating it if it doesn't exist.
+
+```go
+volume, err := mc.Volumes.FromName(ctx, "my-volume", &modal.VolumeFromNameParams{
+    CreateIfMissing: true,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the Volume
+</ParamField>
+
+<ParamField path="params" type="*VolumeFromNameParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name. Defaults to client's environment.
+  </ParamField>
+  
+  <ParamField path="CreateIfMissing" type="bool">
+    If true, creates the Volume if it doesn't exist. Defaults to false.
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Volume` - The Volume instance
+- `error` - NotFoundError if the Volume doesn't exist and CreateIfMissing is false
+
+### Ephemeral
+
+Creates a temporary, nameless Volume that persists until `CloseEphemeral()` is called.
+
+```go
+volume, err := mc.Volumes.Ephemeral(ctx, nil)
+if err != nil {
+    // Handle error
+}
+defer volume.CloseEphemeral()
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*VolumeEphemeralParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Volume` - The ephemeral Volume instance
+- `error` - Error if creation fails
+
+## Volume methods
+
+### ReadOnly
+
+Returns a read-only version of the Volume.
+
+```go
+readOnlyVolume := volume.ReadOnly()
+```
+
+**Returns:**
+- `*Volume` - A new Volume configured as read-only
+
+### IsReadOnly
+
+Checks if the Volume is configured as read-only.
+
+```go
+if volume.IsReadOnly() {
+    fmt.Println("This volume is read-only")
+}
+```
+
+**Returns:**
+- `bool` - true if read-only, false otherwise
+
+### CloseEphemeral
+
+Deletes an ephemeral Volume. Should only be used with volumes created via `Ephemeral()`.
+
+```go
+volume.CloseEphemeral()
+```
+
+<Warning>
+  This method panics if called on a non-ephemeral Volume. Only use with Volumes created via `Ephemeral()`.
+</Warning>
+
+## Managing volumes
+
+### Delete
+
+Deletes a named Volume.
+
+```go
+err := mc.Volumes.Delete(ctx, "my-volume", &modal.VolumeDeleteParams{
+    AllowMissing: false,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the Volume to delete
+</ParamField>
+
+<ParamField path="params" type="*VolumeDeleteParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name
+  </ParamField>
+  
+  <ParamField path="AllowMissing" type="bool">
+    If true, don't error if the Volume doesn't exist
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `error` - Error if deletion fails
+
+<Warning>
+  Deletion is irreversible and will affect any Apps currently using the Volume.
+</Warning>
+
+## Volume type
+
+<ResponseField name="VolumeID" type="string">
+  The unique identifier for the Volume
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  The name of the Volume (empty for ephemeral Volumes)
+</ResponseField>
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "io"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    // Create a persistent Volume
+    volume, err := mc.Volumes.FromName(ctx, "my-data", &modal.VolumeFromNameParams{
+        CreateIfMissing: true,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("Volume ID: %s\n", volume.VolumeID)
+
+    // Use Volume with a Sandbox
+    app, _ := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+        CreateIfMissing: true,
+    })
+    image := mc.Images.FromRegistry("alpine:3.21", nil)
+
+    sb, _ := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+        Volumes: map[string]*modal.Volume{
+            "/mnt/data": volume,
+        },
+    })
+    defer sb.Terminate(ctx, nil)
+
+    // Write to the Volume
+    p, _ := sb.Exec(ctx, []string{"sh", "-c", "echo 'Hello Volume' > /mnt/data/message.txt"}, nil)
+    p.Wait(ctx)
+
+    // Read from the Volume
+    p2, _ := sb.Exec(ctx, []string{"cat", "/mnt/data/message.txt"}, nil)
+    stdout, _ := io.ReadAll(p2.Stdout)
+    fmt.Printf("Volume contents: %s\n", stdout)
+
+    // Use read-only Volume
+    readOnlyVol := volume.ReadOnly()
+    sb2, _ := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+        Volumes: map[string]*modal.Volume{
+            "/mnt/readonly": readOnlyVol,
+        },
+    })
+    defer sb2.Terminate(ctx, nil)
+
+    // Ephemeral Volume example
+    ephemeralVol, _ := mc.Volumes.Ephemeral(ctx, nil)
+    defer ephemeralVol.CloseEphemeral()
+
+    fmt.Printf("Ephemeral Volume ID: %s\n", ephemeralVol.VolumeID)
+}
+```

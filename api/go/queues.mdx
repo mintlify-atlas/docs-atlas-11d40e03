@@ -1,0 +1,442 @@
+---
+title: Queues
+description: Work with Modal Queues for distributed data flow in Go
+---
+
+Queues are distributed, FIFO data structures for coordinating work across Modal Functions and external processes.
+
+## Creating queues
+
+### FromName
+
+References a Queue by its name, optionally creating it if it doesn't exist.
+
+```go
+queue, err := mc.Queues.FromName(ctx, "my-queue", &modal.QueueFromNameParams{
+    CreateIfMissing: true,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the Queue
+</ParamField>
+
+<ParamField path="params" type="*QueueFromNameParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name. Defaults to client's environment.
+  </ParamField>
+  
+  <ParamField path="CreateIfMissing" type="bool">
+    If true, creates the Queue if it doesn't exist. Defaults to false.
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Queue` - The Queue instance
+- `error` - NotFoundError if the Queue doesn't exist and CreateIfMissing is false
+
+### Ephemeral
+
+Creates a temporary, nameless Queue that persists until `CloseEphemeral()` is called.
+
+```go
+queue, err := mc.Queues.Ephemeral(ctx, nil)
+if err != nil {
+    // Handle error
+}
+defer queue.CloseEphemeral()
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*QueueEphemeralParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Queue` - The ephemeral Queue instance
+- `error` - Error if creation fails
+
+## Queue methods
+
+### Put
+
+Adds a single item to the end of the Queue.
+
+```go
+err := queue.Put(ctx, "Hello, Queue!", &modal.QueuePutParams{
+    Partition: "partition-1",
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="v" type="any" required>
+  The item to add (will be serialized with pickle)
+</ParamField>
+
+<ParamField path="params" type="*QueuePutParams">
+  Optional parameters
+  
+  <ParamField path="Timeout" type="*time.Duration">
+    Maximum wait time if Queue is full. nil = wait indefinitely.
+  </ParamField>
+  
+  <ParamField path="Partition" type="string">
+    Partition key (1-64 bytes). Empty string uses default partition.
+  </ParamField>
+  
+  <ParamField path="PartitionTTL" type="time.Duration">
+    Time-to-live for the partition. Defaults to 24 hours.
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `error` - QueueFullError if the Queue is full after timeout
+
+### PutMany
+
+Adds multiple items to the end of the Queue.
+
+```go
+err := queue.PutMany(ctx, []any{"item1", "item2", "item3"}, nil)
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="values" type="[]any" required>
+  The items to add
+</ParamField>
+
+<ParamField path="params" type="*QueuePutManyParams">
+  Same parameters as Put
+</ParamField>
+
+**Returns:**
+- `error` - QueueFullError if the Queue is full after timeout
+
+### Get
+
+Removes and returns one item from the Queue.
+
+```go
+item, err := queue.Get(ctx, &modal.QueueGetParams{
+    Timeout:   ptr(5 * time.Second),
+    Partition: "partition-1",
+})
+if err != nil {
+    // Handle QueueEmptyError
+}
+fmt.Printf("Item: %v\n", item)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*QueueGetParams">
+  Optional parameters
+  
+  <ParamField path="Timeout" type="*time.Duration">
+    Maximum wait time for an item. nil = wait indefinitely.
+  </ParamField>
+  
+  <ParamField path="Partition" type="string">
+    Partition key to get from
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `any` - The dequeued item
+- `error` - QueueEmptyError if no items available within timeout
+
+### GetMany
+
+Removes and returns up to n items from the Queue.
+
+```go
+items, err := queue.GetMany(ctx, 10, &modal.QueueGetManyParams{
+    QueueGetParams: modal.QueueGetParams{
+        Timeout: ptr(5 * time.Second),
+    },
+})
+if err != nil {
+    // Handle error
+}
+fmt.Printf("Got %d items\n", len(items))
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="n" type="int" required>
+  Maximum number of items to retrieve
+</ParamField>
+
+<ParamField path="params" type="*QueueGetManyParams">
+  Same parameters as Get
+</ParamField>
+
+**Returns:**
+- `[]any` - The dequeued items (may be fewer than n)
+- `error` - QueueEmptyError if no items available within timeout
+
+### Len
+
+Returns the number of items in the Queue.
+
+```go
+length, err := queue.Len(ctx, &modal.QueueLenParams{
+    Partition: "partition-1",
+})
+if err != nil {
+    // Handle error
+}
+fmt.Printf("Queue length: %d\n", length)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*QueueLenParams">
+  Optional parameters
+  
+  <ParamField path="Partition" type="string">
+    Partition to check. Empty for default partition.
+  </ParamField>
+  
+  <ParamField path="Total" type="bool">
+    If true, returns total across all partitions (mutually exclusive with Partition)
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `int` - The number of items
+- `error` - Error if the request fails
+
+### Clear
+
+Removes all items from a Queue partition.
+
+```go
+err := queue.Clear(ctx, &modal.QueueClearParams{
+    Partition: "partition-1",
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*QueueClearParams">
+  Optional parameters
+  
+  <ParamField path="Partition" type="string">
+    Partition to clear. Empty for default partition.
+  </ParamField>
+  
+  <ParamField path="All" type="bool">
+    If true, clears all partitions (mutually exclusive with Partition)
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `error` - Error if the operation fails
+
+### Iterate
+
+Yields items from the Queue until it is empty.
+
+```go
+for item, err := range queue.Iterate(ctx, &modal.QueueIterateParams{
+    ItemPollTimeout: 10 * time.Second,
+}) {
+    if err != nil {
+        // Handle error
+        break
+    }
+    fmt.Printf("Item: %v\n", item)
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*QueueIterateParams">
+  Optional parameters
+  
+  <ParamField path="ItemPollTimeout" type="time.Duration">
+    Exit iteration if no new items appear within this timeout
+  </ParamField>
+  
+  <ParamField path="Partition" type="string">
+    Partition to iterate over
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `iter.Seq2[any, error]` - Iterator over Queue items
+
+### CloseEphemeral
+
+Deletes an ephemeral Queue.
+
+```go
+queue.CloseEphemeral()
+```
+
+<Warning>
+  This method panics if called on a non-ephemeral Queue.
+</Warning>
+
+## Managing queues
+
+### Delete
+
+Deletes a named Queue.
+
+```go
+err := mc.Queues.Delete(ctx, "my-queue", &modal.QueueDeleteParams{
+    AllowMissing: false,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the Queue to delete
+</ParamField>
+
+<ParamField path="params" type="*QueueDeleteParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name
+  </ParamField>
+  
+  <ParamField path="AllowMissing" type="bool">
+    If true, don't error if the Queue doesn't exist
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `error` - Error if deletion fails
+
+<Warning>
+  Deletion is irreversible and will affect any Apps currently using the Queue.
+</Warning>
+
+## Queue type
+
+<ResponseField name="QueueID" type="string">
+  The unique identifier for the Queue
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  The name of the Queue (empty for ephemeral Queues)
+</ResponseField>
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    // Create a Queue
+    queue, err := mc.Queues.FromName(ctx, "my-queue", &modal.QueueFromNameParams{
+        CreateIfMissing: true,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // Put items
+    queue.Put(ctx, "task-1", nil)
+    queue.Put(ctx, "task-2", nil)
+    queue.PutMany(ctx, []any{"task-3", "task-4", "task-5"}, nil)
+
+    // Check length
+    length, _ := queue.Len(ctx, nil)
+    fmt.Printf("Queue has %d items\n", length)
+
+    // Get items
+    timeout := 5 * time.Second
+    item, err := queue.Get(ctx, &modal.QueueGetParams{
+        Timeout: &timeout,
+    })
+    if err != nil {
+        fmt.Printf("Queue empty: %v\n", err)
+    } else {
+        fmt.Printf("Got item: %v\n", item)
+    }
+
+    // Get multiple items
+    items, _ := queue.GetMany(ctx, 10, nil)
+    fmt.Printf("Got %d items\n", len(items))
+
+    // Iterate over items
+    for item, err := range queue.Iterate(ctx, nil) {
+        if err != nil {
+            break
+        }
+        fmt.Printf("Processing: %v\n", item)
+    }
+
+    // Use partitions
+    queue.Put(ctx, "data-1", &modal.QueuePutParams{
+        Partition: "batch-1",
+    })
+    item2, _ := queue.Get(ctx, &modal.QueueGetParams{
+        Partition: "batch-1",
+    })
+    fmt.Printf("From partition: %v\n", item2)
+}
+```

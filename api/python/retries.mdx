@@ -1,0 +1,116 @@
+---
+title: modal.Retries
+description: API reference for Modal Retries configuration
+---
+
+Adds a retry policy to a Modal function.
+
+## Constructor
+
+```python
+modal.Retries(
+    *,
+    max_retries: int,
+    backoff_coefficient: float = 2.0,
+    initial_delay: float = 1.0,
+    max_delay: float = 60.0,
+)
+```
+
+Construct a new retries policy, supporting exponential and fixed-interval delays via a backoff coefficient.
+
+<ParamField path="max_retries" type="int" required>
+  The maximum number of retries that can be made in the presence of failures.
+</ParamField>
+
+<ParamField path="backoff_coefficient" type="float" default="2.0">
+  Coefficient controlling how much the retry delay increases each retry attempt. A backoff coefficient of 1.0 creates fixed-delay where the delay period always equals the initial delay.
+</ParamField>
+
+<ParamField path="initial_delay" type="float" default="1.0">
+  Number of seconds that must elapse before the first retry occurs.
+</ParamField>
+
+<ParamField path="max_delay" type="float" default="60.0">
+  Maximum length of retry delay in seconds, preventing the delay from growing infinitely.
+</ParamField>
+
+## Usage
+
+### Basic retry configuration
+
+```python
+import modal
+app = modal.App()
+
+# Basic configuration with 4 max retries and 1-second delay
+@app.function(retries=4)
+def f():
+    pass
+```
+
+### Fixed-interval retries
+
+```python
+# Fixed-interval retries with 3-second delay between failures
+@app.function(
+    retries=modal.Retries(
+        max_retries=2,
+        backoff_coefficient=1.0,
+        initial_delay=3.0,
+    )
+)
+def g():
+    pass
+```
+
+### Exponential backoff
+
+```python
+# Exponential backoff, with retry delay doubling after each failure
+@app.function(
+    retries=modal.Retries(
+        max_retries=4,
+        backoff_coefficient=2.0,
+        initial_delay=1.0,
+    )
+)
+def h():
+    pass
+```
+
+With these settings:
+- 1st retry: 1 second delay
+- 2nd retry: 2 second delay (1 * 2^1)
+- 3rd retry: 4 second delay (1 * 2^2)
+- 4th retry: 8 second delay (1 * 2^3)
+
+### Custom max delay
+
+```python
+# Exponential backoff with capped delay
+@app.function(
+    retries=modal.Retries(
+        max_retries=10,
+        backoff_coefficient=2.0,
+        initial_delay=1.0,
+        max_delay=30.0,  # Never wait more than 30 seconds
+    )
+)
+def i():
+    pass
+```
+
+## Validation
+
+- `max_retries` must be non-negative
+- `max_delay` must be at least 1 second and at most 60 seconds
+- `initial_delay` must be positive and at most 60 seconds  
+- `backoff_coefficient` must be between 1.0 (fixed-interval) and 10.0
+
+## Notes
+
+- Retries are not supported for web endpoints (functions with `@modal.web_endpoint`)
+- Retries are not supported for generator functions
+- The retry policy only applies to application errors and timeouts, not internal failures
+- Internal failures (like worker preemption) are retried automatically up to a limit, separately from the user-specified retry policy

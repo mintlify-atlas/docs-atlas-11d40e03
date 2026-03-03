@@ -1,0 +1,361 @@
+---
+title: ModalClient configuration
+description: Configure the ModalClient with authentication, timeouts, logging, and custom middleware
+---
+
+The `ModalClient` is the main entry point for interacting with Modal's cloud infrastructure. This guide covers initialization and configuration options.
+
+## Basic initialization
+
+Create a client with default settings:
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+```
+
+The client will automatically use credentials from:
+1. Constructor parameters (if provided)
+2. Environment variables (`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`)
+3. Configuration file (`~/.modal.toml`)
+
+## Configuration options
+
+The `ModalClient` constructor accepts a `ModalClientParams` object with these options:
+
+### Authentication
+
+Provide credentials directly to the client:
+
+```typescript
+const modal = new ModalClient({
+  tokenId: "ak-YOUR_TOKEN_ID",
+  tokenSecret: "as-YOUR_TOKEN_SECRET",
+});
+```
+
+<Note>
+  Credentials in constructor parameters take precedence over environment variables and config files.
+</Note>
+
+### Environment
+
+Specify which Modal environment to use:
+
+```typescript
+const modal = new ModalClient({
+  environment: "staging",
+});
+```
+
+### Custom endpoint
+
+Connect to a custom Modal API endpoint:
+
+```typescript
+const modal = new ModalClient({
+  endpoint: "https://custom-api.modal.com:443",
+});
+```
+
+### Timeouts
+
+Set default timeout for API calls (in milliseconds):
+
+```typescript
+const modal = new ModalClient({
+  timeoutMs: 30000, // 30 seconds
+});
+```
+
+You can also override timeouts on individual calls.
+
+### Retries
+
+Configure maximum retry attempts for failed requests:
+
+```typescript
+const modal = new ModalClient({
+  maxRetries: 5, // Default is 3
+});
+```
+
+## Logging
+
+The SDK includes built-in logging for debugging and observability.
+
+### Log levels
+
+Set the log level to control verbosity:
+
+```typescript
+const modal = new ModalClient({
+  logLevel: "debug", // "debug" | "info" | "warn" | "error"
+});
+```
+
+Available log levels:
+- `debug` - Detailed debugging information
+- `info` - General informational messages
+- `warn` - Warning messages
+- `error` - Error messages only
+
+### Custom logger
+
+Provide your own logger implementation:
+
+```typescript
+import type { Logger } from "modal";
+
+const customLogger: Logger = {
+  debug: (...args) => console.log("[DEBUG]", ...args),
+  info: (...args) => console.log("[INFO]", ...args),
+  warn: (...args) => console.warn("[WARN]", ...args),
+  error: (...args) => console.error("[ERROR]", ...args),
+};
+
+const modal = new ModalClient({
+  logger: customLogger,
+});
+```
+
+### Environment variable logging
+
+You can also set the log level via environment variable:
+
+```bash
+export MODAL_LOGLEVEL=debug
+```
+
+## Custom gRPC middleware
+
+Add custom middleware for telemetry, tracing, and observability.
+
+<Warning>
+  The Modal gRPC API is not considered a public API and can change without warning. Use custom middleware at your own risk.
+</Warning>
+
+### Basic middleware example
+
+```typescript
+import { ModalClient } from "modal";
+import type { ClientMiddleware } from "nice-grpc";
+
+const loggingMiddleware: ClientMiddleware = async function* (call, options) {
+  const startTime = Date.now();
+  console.log(`Starting call to ${call.method.path}`);
+  
+  try {
+    const result = yield* call.next(call.request, options);
+    const duration = Date.now() - startTime;
+    console.log(`Call completed in ${duration}ms`);
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`Call failed after ${duration}ms:`, error);
+    throw error;
+  }
+};
+
+const modal = new ModalClient({
+  grpcMiddleware: [loggingMiddleware],
+});
+```
+
+### Advanced telemetry example
+
+Integrate with OpenTelemetry or other observability tools:
+
+```typescript
+import { ModalClient } from "modal";
+import type { ClientMiddleware } from "nice-grpc";
+import { trace, context } from "@opentelemetry/api";
+
+const tracingMiddleware: ClientMiddleware = async function* (call, options) {
+  const tracer = trace.getTracer("modal-client");
+  const span = tracer.startSpan(call.method.path, {
+    kind: 1, // CLIENT
+  });
+  
+  try {
+    const result = yield* context.with(
+      trace.setSpan(context.active(), span),
+      async () => call.next(call.request, options)
+    );
+    span.setStatus({ code: 1 }); // OK
+    return result;
+  } catch (error) {
+    span.setStatus({ code: 2, message: String(error) }); // ERROR
+    span.recordException(error as Error);
+    throw error;
+  } finally {
+    span.end();
+  }
+};
+
+const modal = new ModalClient({
+  grpcMiddleware: [tracingMiddleware],
+});
+```
+
+For a complete telemetry example, see the [telemetry example](https://github.com/modal-labs/modal-client/blob/main/js/examples/telemetry.ts) in the Modal repository.
+
+## Service properties
+
+The `ModalClient` provides access to all Modal services:
+
+```typescript
+const modal = new ModalClient();
+
+// Service properties
+modal.apps           // App management
+modal.sandboxes      // Sandbox operations
+modal.functions      // Function calling
+modal.functionCalls  // Function call management
+modal.cls            // Class calling
+modal.images         // Image building
+modal.volumes        // Volume management
+modal.queues         // Queue operations
+modal.secrets        // Secret management
+modal.proxies        // Proxy management
+modal.cloudBucketMounts // Cloud bucket mounts
+```
+
+## Client methods
+
+### version()
+
+Get the SDK version:
+
+```typescript
+const version = modal.version();
+console.log("Modal SDK version:", version); // e.g., "0.7.3-dev.0"
+```
+
+### environmentName()
+
+Get the current environment name:
+
+```typescript
+const env = modal.environmentName();
+console.log("Environment:", env);
+```
+
+### imageBuilderVersion()
+
+Get the image builder version:
+
+```typescript
+const builderVersion = modal.imageBuilderVersion();
+console.log("Image builder version:", builderVersion); // e.g., "2024.10"
+```
+
+### close()
+
+Close the client and clean up resources:
+
+```typescript
+const modal = new ModalClient();
+
+try {
+  // Use the client...
+  const app = await modal.apps.fromName("my-app");
+} finally {
+  modal.close();
+}
+```
+
+## Complete configuration example
+
+Here's a fully configured client with all options:
+
+```typescript
+import { ModalClient } from "modal";
+import type { ClientMiddleware } from "nice-grpc";
+
+const telemetryMiddleware: ClientMiddleware = async function* (call, options) {
+  // Custom telemetry logic...
+  return yield* call.next(call.request, options);
+};
+
+const modal = new ModalClient({
+  // Authentication
+  tokenId: process.env.CUSTOM_MODAL_ID,
+  tokenSecret: process.env.CUSTOM_MODAL_SECRET,
+  
+  // Environment
+  environment: "production",
+  
+  // Network settings
+  endpoint: "https://api.modal.com:443",
+  timeoutMs: 60000,
+  maxRetries: 5,
+  
+  // Logging
+  logLevel: "info",
+  
+  // Custom middleware
+  grpcMiddleware: [telemetryMiddleware],
+});
+
+// Use the client
+try {
+  const app = await modal.apps.fromName("my-app", {
+    createIfMissing: true,
+  });
+  const image = modal.images.fromRegistry("python:3.13");
+  const sb = await modal.sandboxes.create(app, image);
+  
+  // Work with sandbox...
+  
+  await sb.terminate();
+} finally {
+  modal.close();
+}
+```
+
+## Migration from v0.4
+
+If you're upgrading from v0.4 or earlier, note these breaking changes:
+
+### Old API (v0.4)
+
+```typescript
+import { initializeClient, Function_, App } from "modal";
+
+initializeClient({
+  tokenId: "...",
+  tokenSecret: "...",
+});
+
+const app = await App.lookup("my-app");
+const func = await Function_.lookup("my-app", "my-function");
+```
+
+### New API (v0.5+)
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient({
+  tokenId: "...",
+  tokenSecret: "...",
+});
+
+const app = await modal.apps.fromName("my-app");
+const func = await modal.functions.fromName("my-app", "my-function");
+```
+
+See the [Migration Guide](https://github.com/modal-labs/modal-client/blob/main/MIGRATION-GUIDE.md#javascripttypescript) for a complete list of changes.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Basic usage" icon="code" href="/typescript/basic-usage">
+    Learn basic patterns and workflows
+  </Card>
+  <Card title="API reference" icon="book" href="https://modal-labs.github.io/libmodal/">
+    Explore the full API documentation
+  </Card>
+</CardGroup>

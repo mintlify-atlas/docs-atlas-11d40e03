@@ -1,0 +1,256 @@
+---
+title: CloudBucketMount
+description: Mount cloud storage buckets (S3, GCS, R2) to Modal containers
+---
+
+`CloudBucketMount` allows you to mount cloud storage buckets directly to your Modal containers. Currently supports AWS S3, Google Cloud Storage (GCS), and Cloudflare R2.
+
+S3 buckets are mounted using [AWS S3 Mountpoint](https://github.com/awslabs/mountpoint-s3), which is optimized for reading large files sequentially. It does not support every file operation - consult [the AWS S3 Mountpoint documentation](https://github.com/awslabs/mountpoint-s3/blob/main/doc/SEMANTICS.md) for more information.
+
+## AWS S3
+
+### Basic usage
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+secret = modal.Secret.from_name(
+    "aws-secret",
+    required_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+    # Note: providing AWS_REGION can help when automatic detection fails
+)
+
+@app.function(
+    volumes={
+        "/my-mount": modal.CloudBucketMount(
+            bucket_name="s3-bucket-name",
+            secret=secret,
+            read_only=True
+        )
+    }
+)
+def process_s3_data():
+    subprocess.run(["ls", "/my-mount"], check=True)
+```
+
+### Public buckets
+
+For publicly accessible buckets, you can omit the secret:
+
+```python
+@app.function(
+    volumes={
+        "/public-data": modal.CloudBucketMount(
+            bucket_name="public-bucket-name",
+            read_only=True
+        )
+    }
+)
+def read_public_data():
+    with open("/public-data/file.txt") as f:
+        print(f.read())
+```
+
+### Key prefix
+
+Mount only a specific prefix (subdirectory) of the bucket:
+
+```python
+modal.CloudBucketMount(
+    bucket_name="my-bucket",
+    key_prefix="data/2024/",  # Must end with '/'
+    secret=secret,
+)
+```
+
+<Note>
+The `key_prefix` must end with a `/` since it will be prefixed to all object paths.
+</Note>
+
+### Requester pays
+
+For buckets that use [requester pays](https://docs.aws.amazon.com/AmazonS3/latest/userguide/RequesterPaysBuckets.html):
+
+```python
+modal.CloudBucketMount(
+    bucket_name="requester-pays-bucket",
+    secret=secret,
+    requester_pays=True,
+)
+```
+
+<Note>
+Credentials are required when using requester pays.
+</Note>
+
+## Cloudflare R2
+
+Cloudflare R2 is [S3-compatible](https://developers.cloudflare.com/r2/api/s3/api/), but requires the `bucket_endpoint_url` parameter.
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+secret = modal.Secret.from_name(
+    "r2-secret",
+    required_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+)
+
+@app.function(
+    volumes={
+        "/my-mount": modal.CloudBucketMount(
+            bucket_name="my-r2-bucket",
+            bucket_endpoint_url="https://<ACCOUNT_ID>.r2.cloudflarestorage.com",
+            secret=secret,
+            read_only=True
+        )
+    }
+)
+def process_r2_data():
+    subprocess.run(["ls", "/my-mount"], check=True)
+```
+
+## Google Cloud Storage (GCS)
+
+Google Cloud Storage is [S3-compatible](https://cloud.google.com/storage/docs/interoperability). GCS buckets require:
+
+1. A [HMAC key](https://cloud.google.com/storage/docs/authentication/managing-hmackeys#create)
+2. Google-specific key names in the secret
+3. The GCS endpoint URL
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+gcp_hmac_secret = modal.Secret.from_name(
+    "gcp-secret",
+    required_keys=["GOOGLE_ACCESS_KEY_ID", "GOOGLE_ACCESS_KEY_SECRET"]
+)
+
+@app.function(
+    volumes={
+        "/my-mount": modal.CloudBucketMount(
+            bucket_name="my-gcs-bucket",
+            bucket_endpoint_url="https://storage.googleapis.com",
+            secret=gcp_hmac_secret,
+        )
+    }
+)
+def process_gcs_data():
+    subprocess.run(["ls", "/my-mount"], check=True)
+```
+
+## OIDC authentication
+
+For AWS, you can use OIDC (OpenID Connect) authentication instead of static credentials:
+
+```python
+modal.CloudBucketMount(
+    bucket_name="my-bucket",
+    oidc_auth_role_arn="arn:aws:iam::123456789012:role/MyRole",
+    read_only=True,
+)
+```
+
+## Read-write mounts
+
+By default, mounts are read-only. To enable writes, set `read_only=False`:
+
+```python
+@app.function(
+    volumes={
+        "/output": modal.CloudBucketMount(
+            bucket_name="output-bucket",
+            secret=secret,
+            read_only=False,
+        )
+    }
+)
+def write_results():
+    with open("/output/results.txt", "w") as f:
+        f.write("computation complete")
+```
+
+<Warning>
+Write operations are supported but may have limitations. Consult the [AWS S3 Mountpoint semantics documentation](https://github.com/awslabs/mountpoint-s3/blob/main/doc/SEMANTICS.md) for details.
+</Warning>
+
+## Advanced options
+
+### Force path style
+
+Force path-style S3 URLs instead of virtual-hosted-style:
+
+```python
+modal.CloudBucketMount(
+    bucket_name="my-bucket",
+    secret=secret,
+    force_path_style=True,
+)
+```
+
+This changes URLs from `https://bucket.s3.region.amazonaws.com/key` to `https://s3.region.amazonaws.com/bucket/key`.
+
+## API reference
+
+### CloudBucketMount parameters
+
+<ParamField path="bucket_name" type="str" required>
+  Name of the cloud storage bucket to mount.
+</ParamField>
+
+<ParamField path="bucket_endpoint_url" type="str">
+  Endpoint URL for the bucket. Required for Cloudflare R2 and Google Cloud Storage.
+  
+  Examples:
+  - R2: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+  - GCS: `https://storage.googleapis.com`
+</ParamField>
+
+<ParamField path="secret" type="Secret">
+  Secret containing credentials to access the bucket.
+  
+  - For AWS S3: Must contain `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Optionally `AWS_REGION`.
+  - For GCS: Must contain `GOOGLE_ACCESS_KEY_ID` and `GOOGLE_ACCESS_KEY_SECRET`.
+  - For R2: Must contain `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+  
+  Not required for public buckets.
+</ParamField>
+
+<ParamField path="key_prefix" type="str">
+  Prefix to apply to all object paths. Must end with `/`. Useful for mounting a specific "subdirectory" of the bucket.
+</ParamField>
+
+<ParamField path="read_only" type="bool" default="False">
+  If True, mount the bucket as read-only. Write operations will fail.
+</ParamField>
+
+<ParamField path="requester_pays" type="bool" default="False">
+  Enable requester pays mode for S3 buckets. Requires credentials.
+</ParamField>
+
+<ParamField path="oidc_auth_role_arn" type="str">
+  ARN of the IAM role to assume using OIDC authentication. Alternative to static credentials for AWS.
+</ParamField>
+
+<ParamField path="force_path_style" type="bool" default="False">
+  Force path-style S3 URLs instead of virtual-hosted-style URLs.
+</ParamField>
+
+## Limitations
+
+- S3 Mountpoint is optimized for **sequential reads** of large files
+- Not all filesystem operations are supported (see [AWS S3 Mountpoint semantics](https://github.com/awslabs/mountpoint-s3/blob/main/doc/SEMANTICS.md))
+- Random access and frequent small reads may have degraded performance
+- Write support is limited
+
+## Best practices
+
+1. **Use read-only mounts** when possible for better performance and safety
+2. **Specify AWS_REGION** in your secret to avoid automatic region detection overhead
+3. **Use key prefixes** to limit the scope of mounted data
+4. **Consider Volume** for use cases requiring full filesystem semantics

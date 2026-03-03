@@ -1,0 +1,302 @@
+---
+title: Cron, Period, and SchedulerPlacement
+description: Schedule Modal functions to run periodically or at specific times
+---
+
+Modal supports scheduling functions to run automatically on a recurring basis using two types of schedules: `Cron` for cron-style scheduling and `Period` for interval-based scheduling.
+
+## Cron schedules
+
+Cron schedules use the [Unix cron tab](https://crontab.guru/) syntax to specify when functions should run.
+
+### Basic usage
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function(schedule=modal.Cron("* * * * *"))
+def f():
+    print("This function will run every minute")
+```
+
+### Cron syntax examples
+
+```python
+# Run at 4:05am UTC every night
+@app.function(schedule=modal.Cron("5 4 * * *"))
+def nightly_job():
+    pass
+
+# Run every Thursday at 9am UTC
+@app.function(schedule=modal.Cron("0 9 * * 4"))
+def weekly_report():
+    pass
+
+# Run at midnight on the first day of every month
+@app.function(schedule=modal.Cron("0 0 1 * *"))
+def monthly_cleanup():
+    pass
+```
+
+### Timezone support
+
+By default, cron schedules run in UTC. You can specify a different timezone:
+
+```python
+# Run daily at 6am New York time, adjusting for daylight saving
+@app.function(
+    schedule=modal.Cron("0 6 * * *", timezone="America/New_York")
+)
+def morning_task():
+    # Runs at 11am UTC in winter, 10am UTC in summer
+    pass
+
+# Run at 9am Tokyo time
+@app.function(
+    schedule=modal.Cron("0 9 * * *", timezone="Asia/Tokyo")
+)
+def tokyo_task():
+    pass
+```
+
+Timezones use the standard IANA timezone database format (e.g., `"America/New_York"`, `"Europe/London"`, `"Asia/Tokyo"`).
+
+## Period schedules
+
+Period schedules run functions at fixed time intervals.
+
+### Basic usage
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function(schedule=modal.Period(days=1))
+def f():
+    print("This function will run every day")
+```
+
+### Time units
+
+You can specify periods using various time units:
+
+```python
+# Every 4 hours
+@app.function(schedule=modal.Period(hours=4))
+def four_hourly():
+    pass
+
+# Every 15 minutes
+@app.function(schedule=modal.Period(minutes=15))
+def quarter_hourly():
+    pass
+
+# Every π seconds
+import math
+@app.function(schedule=modal.Period(seconds=math.pi))
+def pi_seconds():
+    pass
+```
+
+### Combining time units
+
+You can combine multiple time units:
+
+```python
+# Every 1 day and 6 hours
+@app.function(schedule=modal.Period(days=1, hours=6))
+def daily_plus_six():
+    pass
+
+# Every 2 weeks and 3 days
+@app.function(schedule=modal.Period(weeks=2, days=3))
+def biweekly_plus():
+    pass
+```
+
+### Calendar-aware periods
+
+<Note>
+  `Period` is calendar-aware for days, months, and years. This means `days=1` will trigger the function at the same time every day, accounting for daylight saving time and leap seconds. Similarly, `months=1` will trigger on the same day each month.
+</Note>
+
+```python
+# Runs at the same time every day (accounting for DST)
+@app.function(schedule=modal.Period(days=1))
+def daily():
+    pass
+
+# Runs on the same day every month
+@app.function(schedule=modal.Period(months=1))
+def monthly():
+    pass
+
+# NOT the same - runs every 86400 seconds (no DST adjustment)
+@app.function(schedule=modal.Period(seconds=86400))
+def every_86400_seconds():
+    pass  # This behaves differently than days=1
+```
+
+This behavior is similar to the [dateutil](https://dateutil.readthedocs.io/en/latest/relativedelta.html) package.
+
+## SchedulerPlacement
+
+<Warning>
+  `SchedulerPlacement` is an experimental feature and may change in future releases.
+</Warning>
+
+SchedulerPlacement allows you to control where your functions are scheduled to run.
+
+### Basic usage
+
+```python
+from modal import SchedulerPlacement
+
+# Run in a specific region
+placement = SchedulerPlacement(region="us-east-1")
+
+# Run in multiple regions
+placement = SchedulerPlacement(region=["us-east-1", "eu-west-1"])
+
+# Run in a specific zone
+placement = SchedulerPlacement(zone="us-east-1a")
+
+# Request spot instances
+placement = SchedulerPlacement(spot=True)
+
+# Request on-demand instances
+placement = SchedulerPlacement(spot=False)
+
+# Specify instance type
+placement = SchedulerPlacement(instance_type="c5.xlarge")
+
+# Multiple instance types
+placement = SchedulerPlacement(instance_type=["c5.xlarge", "c5.2xlarge"])
+```
+
+### Combining constraints
+
+```python
+# Spot instances in specific regions
+placement = SchedulerPlacement(
+    region=["us-east-1", "us-west-2"],
+    spot=True
+)
+
+# Specific instance type in specific region
+placement = SchedulerPlacement(
+    region="eu-west-1",
+    instance_type="c5.4xlarge"
+)
+```
+
+## API reference
+
+### Cron()
+
+<ParamField path="cron_string" type="str" required>
+  Cron expression string in Unix cron tab format. Use [crontab.guru](https://crontab.guru/) to build and validate expressions.
+</ParamField>
+
+<ParamField path="timezone" type="str" default="UTC">
+  IANA timezone name (e.g., `"America/New_York"`, `"Europe/London"`). Defaults to UTC.
+</ParamField>
+
+### Period()
+
+<ParamField path="years" type="int" default="0">
+  Number of years in the period.
+</ParamField>
+
+<ParamField path="months" type="int" default="0">
+  Number of months in the period.
+</ParamField>
+
+<ParamField path="weeks" type="int" default="0">
+  Number of weeks in the period.
+</ParamField>
+
+<ParamField path="days" type="int" default="0">
+  Number of days in the period.
+</ParamField>
+
+<ParamField path="hours" type="int" default="0">
+  Number of hours in the period.
+</ParamField>
+
+<ParamField path="minutes" type="int" default="0">
+  Number of minutes in the period.
+</ParamField>
+
+<ParamField path="seconds" type="float" default="0">
+  Number of seconds in the period. This is the only parameter that accepts float values.
+</ParamField>
+
+<Note>
+  All parameters are optional, but at least one must be specified. All parameters are integers except `seconds`, which can be a float.
+</Note>
+
+### SchedulerPlacement()
+
+<Warning>
+  This is an experimental API and is subject to change.
+</Warning>
+
+<ParamField path="region" type="str | Sequence[str]" default="None">
+  AWS region(s) where the function can run. Can be a single region string or a list of regions.
+</ParamField>
+
+<ParamField path="zone" type="str" default="None">
+  Specific availability zone where the function should run.
+</ParamField>
+
+<ParamField path="spot" type="bool" default="None">
+  If `True`, use spot instances. If `False`, use on-demand instances.
+</ParamField>
+
+<ParamField path="instance_type" type="str | Sequence[str]" default="None">
+  EC2 instance type(s) to use. Can be a single instance type or a list of acceptable types.
+</ParamField>
+
+## Examples
+
+### Daily backup at 3am
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function(schedule=modal.Cron("0 3 * * *"))
+def daily_backup():
+    print("Running daily backup at 3am UTC")
+```
+
+### Health check every 5 minutes
+
+```python
+@app.function(schedule=modal.Period(minutes=5))
+def health_check():
+    print("Running health check")
+```
+
+### Weekly report every Monday at 9am ET
+
+```python
+@app.function(
+    schedule=modal.Cron("0 9 * * 1", timezone="America/New_York")
+)
+def weekly_report():
+    print("Generating weekly report")
+```
+
+### Hourly data sync
+
+```python
+@app.function(schedule=modal.Period(hours=1))
+def sync_data():
+    print("Syncing data every hour")
+```

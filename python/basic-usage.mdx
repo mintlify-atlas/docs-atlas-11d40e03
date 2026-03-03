@@ -1,0 +1,275 @@
+---
+title: Basic usage
+description: Learn the basic patterns for writing and running Modal functions.
+---
+
+This guide covers the fundamental patterns for using Modal's Python SDK.
+
+## Creating an app
+
+Every Modal project starts with an `App` object:
+
+```python
+import modal
+
+app = modal.App("my-first-app")
+```
+
+The app name is optional but recommended for identifying your deployments.
+
+## Writing functions
+
+Decorate any Python function with `@app.function()` to run it on Modal:
+
+```python
+@app.function()
+def hello(name: str):
+    return f"Hello, {name}!"
+```
+
+## Running locally
+
+To run a Modal app locally, use the `modal run` command:
+
+```bash
+modal run my_script.py
+```
+
+This executes your local Python script and runs decorated functions in Modal containers.
+
+## Calling functions
+
+There are several ways to invoke Modal functions:
+
+### Remote execution
+
+Call `.remote()` to execute the function in a Modal container:
+
+```python
+if __name__ == "__main__":
+    result = hello.remote("Alice")
+    print(result)  # "Hello, Alice!"
+```
+
+### Local execution
+
+Call `.local()` to run the function locally:
+
+```python
+result = hello.local("Bob")
+```
+
+### Map over inputs
+
+Process multiple inputs in parallel using `.map()`:
+
+```python
+names = ["Alice", "Bob", "Charlie"]
+results = list(hello.map(names))
+# ["Hello, Alice!", "Hello, Bob!", "Hello, Charlie!"]
+```
+
+## Using custom images
+
+Specify the container environment with the `image` parameter:
+
+```python
+image = modal.Image.debian_slim().pip_install(
+    "pandas",
+    "numpy",
+    "scikit-learn"
+)
+
+@app.function(image=image)
+def analyze_data(data):
+    import pandas as pd
+    import numpy as np
+    # Your analysis code here
+    return results
+```
+
+## Working with context
+
+Modal provides utilities to check execution context:
+
+```python
+from modal import is_local
+
+@app.function()
+def my_function():
+    if is_local():
+        print("Running locally")
+    else:
+        print("Running in Modal container")
+```
+
+## Accessing runtime information
+
+Get information about the current function execution:
+
+```python
+from modal import current_input_id, current_function_call_id
+
+@app.function()
+def process_task():
+    input_id = current_input_id()
+    call_id = current_function_call_id()
+    print(f"Processing input {input_id} from call {call_id}")
+```
+
+## Using secrets
+
+Securely pass credentials to your functions:
+
+```python
+@app.function(
+    secrets=[modal.Secret.from_name("my-api-key")]
+)
+def call_api():
+    import os
+    api_key = os.environ["API_KEY"]
+    # Use the API key
+```
+
+## Mounting volumes
+
+Persist data across function invocations:
+
+```python
+volume = modal.Volume.from_name("my-data", create_if_missing=True)
+
+@app.function(
+    volumes={'/data': volume}
+)
+def save_results(data):
+    with open('/data/results.json', 'w') as f:
+        json.dump(data, f)
+    volume.commit()  # Persist changes
+```
+
+## GPU functions
+
+Request GPU resources for compute-intensive tasks:
+
+```python
+@app.function(
+    gpu="T4",  # or "A10G", "A100", etc.
+    image=modal.Image.debian_slim().pip_install("torch")
+)
+def train_model():
+    import torch
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Training code
+```
+
+## Retry policies
+
+Configure automatic retries for transient failures:
+
+```python
+@app.function(
+    retries=modal.Retries(
+        max_retries=3,
+        backoff_coefficient=2.0,
+        initial_delay=1.0
+    )
+)
+def flaky_function():
+    # Function that might fail
+    pass
+```
+
+## Timeouts
+
+Set execution time limits:
+
+```python
+@app.function(timeout=300)  # 5 minutes
+def long_running_task():
+    # Task code
+    pass
+```
+
+## Local entrypoints
+
+Define code that runs locally when the script is executed:
+
+```python
+@app.local_entrypoint()
+def main():
+    # This runs locally
+    result = hello.remote("World")
+    print(f"Result: {result}")
+```
+
+Then run with:
+
+```bash
+modal run my_script.py
+```
+
+## Complete example
+
+Here's a complete example combining multiple concepts:
+
+```python
+import modal
+
+app = modal.App("data-processor")
+
+image = modal.Image.debian_slim().pip_install("pandas", "requests")
+volume = modal.Volume.from_name("processed-data", create_if_missing=True)
+
+@app.function(
+    image=image,
+    volumes={'/data': volume},
+    secrets=[modal.Secret.from_name("api-credentials")],
+    retries=3
+)
+def process_record(record_id: int):
+    import pandas as pd
+    import requests
+    import os
+    
+    # Fetch data from API
+    api_key = os.environ["API_KEY"]
+    response = requests.get(
+        f"https://api.example.com/records/{record_id}",
+        headers={"Authorization": f"Bearer {api_key}"}
+    )
+    data = response.json()
+    
+    # Process with pandas
+    df = pd.DataFrame([data])
+    df['processed'] = True
+    
+    # Save to volume
+    df.to_csv(f'/data/record_{record_id}.csv', index=False)
+    volume.commit()
+    
+    return record_id
+
+@app.local_entrypoint()
+def main():
+    # Process records in parallel
+    record_ids = range(1, 101)
+    results = list(process_record.map(record_ids))
+    print(f"Processed {len(results)} records")
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Async support" icon="bolt" href="/python/async-support">
+    Learn how to use async/await patterns
+  </Card>
+  <Card title="Web endpoints" icon="globe" href="/guides/webhooks">
+    Create HTTP endpoints for your functions
+  </Card>
+  <Card title="Scheduled jobs" icon="clock" href="/guides/cron">
+    Run functions on schedules
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/python/cli-reference">
+    Explore all CLI commands
+  </Card>
+</CardGroup>

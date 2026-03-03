@@ -1,0 +1,52 @@
+---
+title: Go SDK overview
+description: Overview of the Modal Go SDK for serverless cloud compute
+---
+
+The Modal Go SDK provides convenient, on-demand access to serverless cloud compute on Modal from Go projects. Use it to safely run arbitrary code in Modal Sandboxes, call Modal Functions, and interact with Modal resources.
+
+## Key features
+
+The Go SDK enables you to:
+
+- **Run code in sandboxes**: Create secure, isolated environments with custom images and dependencies
+- **Call Modal Functions**: Invoke Python functions deployed on Modal from your Go applications
+- **Manage resources**: Interact with Volumes, Secrets, Queues, and other Modal resources
+- **Build custom images**: Create and configure container images for your workloads
+- **Telemetry and observability**: Add custom gRPC interceptors for tracing and monitoring
+
+<Note>
+The Go SDK is approaching feature parity with the [Python SDK](https://github.com/modal-labs/modal-client), although defining Modal Functions will likely remain exclusive to Python.
+</Note>
+
+## Requirements
+
+- Go 1.23 or later
+- Modal account with valid authentication credentials
+
+## Feature parity
+
+The Go SDK supports most features from the Python SDK:
+
+- Creating and managing Sandboxes with GPU support
+- Calling deployed Functions and Classes
+- Working with Volumes, Secrets, and Queues
+- Building and managing container Images
+- Filesystem operations and snapshots
+- Port tunnels and network access
+- Custom observability via gRPC interceptors
+
+<Warning>
+Defining Modal Functions is exclusive to Python. The Go SDK can only call existing Functions deployed via Python.
+</Warning>
+
+## Resources
+
+- [Go package documentation](https://pkg.go.dev/github.com/modal-labs/modal-client/go)
+- [Main Modal documentation](https://modal.com/docs)
+- [User guides](https://modal.com/docs/guide)
+- [GitHub repository](https://github.com/modal-labs/modal-client)
+
+## Support
+
+For usage questions and support, reach out on the [Modal Community Slack](https://modal.com/slack).

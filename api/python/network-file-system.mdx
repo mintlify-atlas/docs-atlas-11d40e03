@@ -1,0 +1,135 @@
+---
+title: modal.NetworkFileSystem
+description: API reference for Modal NetworkFileSystem (deprecated)
+---
+
+<Warning>
+`NetworkFileSystem` has been deprecated and will be removed. Use `modal.Volume` instead for persistent file storage.
+</Warning>
+
+A shared, writable file system accessible by one or more Modal functions.
+
+By attaching this file system as a mount to one or more functions, they can share and persist data with each other.
+
+## Usage
+
+```python
+import modal
+
+nfs = modal.NetworkFileSystem.from_name("my-nfs", create_if_missing=True)
+app = modal.App()
+
+@app.function(network_file_systems={"/root/foo": nfs})
+def f():
+    pass
+
+@app.function(network_file_systems={"/root/goo": nfs})
+def g():
+    pass
+```
+
+## Factory methods
+
+### NetworkFileSystem.from_name
+
+```python
+modal.NetworkFileSystem.from_name(
+    name: str,
+    *,
+    environment_name: Optional[str] = None,
+    create_if_missing: bool = False,
+    client: Optional[Client] = None,
+) -> NetworkFileSystem
+```
+
+Reference a NetworkFileSystem by its name, creating if necessary.
+
+<ParamField path="name" type="str" required>
+  Name of the NetworkFileSystem.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to look up in.
+</ParamField>
+
+<ParamField path="create_if_missing" type="bool" default="False">
+  Create if it doesn't exist.
+</ParamField>
+
+**Example:**
+
+```python
+nfs = NetworkFileSystem.from_name("my-nfs", create_if_missing=True)
+
+@app.function(network_file_systems={"/data": nfs})
+def f():
+    pass
+```
+
+### NetworkFileSystem.ephemeral
+
+```python
+modal.NetworkFileSystem.ephemeral(
+    client: Optional[Client] = None,
+    environment_name: Optional[str] = None,
+) -> ContextManager[NetworkFileSystem]
+```
+
+Creates a new ephemeral network filesystem within a context manager.
+
+**Example:**
+
+```python
+with modal.NetworkFileSystem.ephemeral() as nfs:
+    assert nfs.listdir("/") == []
+```
+
+## Methods
+
+### nfs.write_file
+
+```python
+nfs.write_file(
+    remote_path: str,
+    fp: BinaryIO,
+) -> int
+```
+
+Write from a file object to a path on the network file system, atomically.
+
+Will create any needed parent directories automatically.
+
+### nfs.read_file
+
+```python
+nfs.read_file(
+    path: str,
+) -> AsyncIterator[bytes]
+```
+
+Read a file from the network file system.
+
+### nfs.iterdir
+
+```python
+nfs.iterdir(
+    path: str,
+) -> AsyncIterator[FileEntry]
+```
+
+Iterate over all files in a directory.
+
+- Passing a directory path lists all files in the directory
+- Passing a file path returns a list containing only that file's listing
+- Passing a glob path returns all files matching that glob
+
+### nfs.add_local_file
+
+```python
+nfs.add_local_file(
+    local_path: Union[Path, str],
+    remote_path: Optional[Union[str, PurePosixPath]] = None,
+)
+```
+
+Upload a local file to the network file system.

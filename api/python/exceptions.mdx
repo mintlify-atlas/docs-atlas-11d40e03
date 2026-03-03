@@ -1,0 +1,220 @@
+---
+title: Exception classes
+description: API reference for Modal exception classes
+---
+
+Modal-specific exception types.
+
+## Base exception
+
+### modal.Error
+
+Base class for all Modal errors.
+
+**Usage:**
+
+```python
+import modal
+
+try:
+    ...
+except modal.Error:
+    # Catch any exception raised by Modal's systems
+    print("Responding to error...")
+```
+
+## Client errors
+
+### modal.InvalidError
+
+Raised when user does something invalid.
+
+### modal.AuthError
+
+Raised when a client has missing or invalid authentication.
+
+### modal.NotFoundError
+
+Raised when a requested resource was not found.
+
+### modal.AlreadyExistsError
+
+Raised when a resource creation conflicts with an existing resource.
+
+### modal.PermissionDeniedError
+
+Raised when a user does not have permission to perform the requested operation.
+
+### modal.ConflictError
+
+Raised when a resource conflict occurs between the request and current system state.
+
+Inherits from `InvalidError`.
+
+## Server errors
+
+### modal.InternalError
+
+Raised when an internal error occurs in the Modal system.
+
+### modal.ServiceError
+
+Raised when an error occurs in basic client/server communication.
+
+### modal.RemoteError
+
+Raised when an error occurs on the Modal server.
+
+### modal.DataLossError
+
+Raised when data is lost or corrupted.
+
+### modal.ResourceExhaustedError
+
+Raised when a server-side resource has been exhausted, e.g. a quota or rate limit.
+
+### modal.UnimplementedError
+
+Raised when a requested operation is not implemented or not supported.
+
+## Timeout errors
+
+### modal.TimeoutError
+
+Base class for Modal timeouts.
+
+### modal.FunctionTimeoutError
+
+Raised when a Function exceeds its execution duration limit and times out.
+
+Inherits from `TimeoutError`.
+
+### modal.SandboxTimeoutError
+
+Raised when a Sandbox exceeds its execution duration limit and times out.
+
+Inherits from `TimeoutError`.
+
+### modal.ExecTimeoutError
+
+Raised when a container process exceeds its execution duration limit and times out.
+
+Inherits from `TimeoutError`.
+
+### modal.InteractiveTimeoutError
+
+Raised when interactive frontends time out while trying to connect to a container.
+
+Inherits from `TimeoutError`.
+
+### modal.OutputExpiredError
+
+Raised when the Output exceeds expiration and times out.
+
+Inherits from `TimeoutError`.
+
+### modal.MountUploadTimeoutError
+
+Raised when a Mount upload times out.
+
+Inherits from `TimeoutError`.
+
+### modal.VolumeUploadTimeoutError
+
+Raised when a Volume upload times out.
+
+Inherits from `TimeoutError`.
+
+## Runtime errors
+
+### modal.ExecutionError
+
+Raised when something unexpected happened during runtime.
+
+### modal.SandboxTerminatedError
+
+Raised when a Sandbox is terminated for an internal reason.
+
+## Connection errors
+
+### modal.ConnectionError
+
+Raised when an issue occurs while connecting to the Modal servers.
+
+### modal.VersionError
+
+Raised when the current client version of Modal is unsupported.
+
+### modal.ClientClosed
+
+Raised when operations are attempted on a closed client.
+
+## Serialization errors
+
+### modal.SerializationError
+
+Raised to provide more context when an error is encountered during serialization.
+
+### modal.DeserializationError
+
+Raised to provide more context when an error is encountered during deserialization.
+
+### modal.RequestSizeError
+
+Raised when an operation produces a gRPC request that is rejected by the server for being too large.
+
+## Warnings
+
+### modal.DeprecationError
+
+UserWarning category emitted when a deprecated Modal feature or API is used.
+
+### modal.PendingDeprecationError
+
+Warning for soon to be deprecated features.
+
+### modal.ServerWarning
+
+Warning originating from the Modal server and re-issued in client code.
+
+### modal.AsyncUsageWarning
+
+Warning emitted when a blocking Modal interface is used in an async context.
+
+## Utility functions
+
+### modal.exception.simulate_preemption
+
+```python
+modal.exception.simulate_preemption(
+    wait_seconds: int,
+    jitter_seconds: int = 0,
+)
+```
+
+Utility for simulating a preemption interrupt after `wait_seconds` seconds.
+
+The first interrupt is the SIGINT signal. After 30 seconds, a second interrupt will trigger (simulating SIGKILL).
+
+<ParamField path="wait_seconds" type="int" required>
+  Seconds to wait before first interrupt.
+</ParamField>
+
+<ParamField path="jitter_seconds" type="int" default="0">
+  Additional random jitter (0 to jitter_seconds) before first interrupt.
+</ParamField>
+
+**Example:**
+
+```python
+import time
+from modal.exception import simulate_preemption
+
+simulate_preemption(3)
+
+try:
+    time.sleep(10)
+except KeyboardInterrupt:
+    print("Simulated preemption!")
+    # Cleanup code here
+```

@@ -1,0 +1,325 @@
+---
+title: modal.Cls
+description: API reference for Modal Cls class
+---
+
+Cls adds method pooling and lifecycle hook behavior to `modal.Function`.
+
+Generally, you will not construct a Cls directly. Instead, use the `@app.cls()` decorator on the App object.
+
+## Decorator
+
+### @app.cls
+
+```python
+@app.cls(
+    image: Optional[Image] = None,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    gpu: GPU_T = None,
+    network_file_systems: dict[Union[str, PurePosixPath], NetworkFileSystem] = {},
+    volumes: dict[Union[str, PurePosixPath], Union[Volume, CloudBucketMount]] = {},
+    cpu: Optional[Union[float, tuple[float, float]]] = None,
+    memory: Optional[Union[int, tuple[int, int]]] = None,
+    ephemeral_disk: Optional[int] = None,
+    min_containers: Optional[int] = None,
+    max_containers: Optional[int] = None,
+    buffer_containers: Optional[int] = None,
+    scaledown_window: Optional[int] = None,
+    proxy: Optional[Proxy] = None,
+    retries: Optional[Union[int, Retries]] = None,
+    timeout: int = 300,
+    startup_timeout: Optional[int] = None,
+    cloud: Optional[str] = None,
+    region: Optional[Union[str, Sequence[str]]] = None,
+    nonpreemptible: bool = False,
+    enable_memory_snapshot: bool = False,
+    block_network: bool = False,
+    restrict_modal_access: bool = False,
+    single_use_containers: bool = False,
+    include_source: Optional[bool] = None,
+)
+```
+
+Decorator to register a new Modal Cls with this App.
+
+Accepts the same parameters as `@app.function()` except `is_generator`, `schedule`, and `name`.
+
+## Usage
+
+### Basic class
+
+```python
+@app.cls()
+class MyModel:
+    @modal.method()
+    def predict(self, x):
+        return x * 2
+
+# Call the method
+result = MyModel().predict.remote(21)  # Returns 42
+```
+
+### Class with parameters
+
+Use `modal.parameter()` to specify class parameters:
+
+```python
+@app.cls()
+class MyModel:
+    model_name: str = modal.parameter()
+    
+    @modal.enter()
+    def load_model(self):
+        # Load model using self.model_name
+        pass
+    
+    @modal.method()
+    def predict(self, x):
+        return self.model.predict(x)
+
+# Create an instance with parameters
+model = MyModel(model_name="gpt-4")
+result = model.predict.remote(data)
+```
+
+### Lifecycle hooks
+
+```python
+@app.cls()
+class MyService:
+    @modal.enter()
+    def startup(self):
+        # Called when container starts
+        print("Service starting up")
+    
+    @modal.exit()
+    def shutdown(self):
+        # Called when container shuts down
+        print("Service shutting down")
+    
+    @modal.method()
+    def process(self, data):
+        return data
+```
+
+## Methods
+
+### Cls.from_name
+
+```python
+modal.Cls.from_name(
+    app_name: str,
+    name: str,
+    *,
+    environment_name: Optional[str] = None,
+    client: Optional[Client] = None,
+) -> Cls
+```
+
+Reference a Cls from a deployed App by its name.
+
+This is a lazy method that defers hydrating the local object until it is actually used.
+
+<ParamField path="app_name" type="str" required>
+  Name of the deployed App.
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Name of the Cls within the App.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to look up the Cls in.
+</ParamField>
+
+<ParamField path="client" type="Client">
+  Optional Modal client to use.
+</ParamField>
+
+<ResponseField name="cls" type="Cls">
+  The referenced Cls instance.
+</ResponseField>
+
+**Example:**
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+model = Model()
+result = model.predict.remote(data)
+```
+
+### cls.with_options
+
+```python
+cls.with_options(
+    *,
+    cpu: Optional[Union[float, tuple[float, float]]] = None,
+    memory: Optional[Union[int, tuple[int, int]]] = None,
+    gpu: GPU_T = None,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    volumes: dict[Union[str, PurePosixPath], Union[Volume, CloudBucketMount]] = {},
+    retries: Optional[Union[int, Retries]] = None,
+    max_containers: Optional[int] = None,
+    buffer_containers: Optional[int] = None,
+    scaledown_window: Optional[int] = None,
+    timeout: Optional[int] = None,
+    region: Optional[Union[str, Sequence[str]]] = None,
+    cloud: Optional[str] = None,
+) -> Cls
+```
+
+Override the static Cls configuration at runtime.
+
+This returns a new Cls instance that will autoscale independently of the original. Options cannot be "unset" with this method.
+
+**Example:**
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+ModelGPU = Model.with_options(gpu="A100")
+model = ModelGPU()
+result = model.predict.remote(data)  # Runs with A100 GPU
+```
+
+Options can be stacked:
+
+```python
+Model.with_options(gpu="A100").with_options(scaledown_window=300)
+```
+
+### cls.with_concurrency
+
+```python
+cls.with_concurrency(
+    *,
+    max_inputs: int,
+    target_inputs: Optional[int] = None,
+) -> Cls
+```
+
+Create an instance of the Cls with input concurrency enabled or overridden.
+
+<ParamField path="max_inputs" type="int" required>
+  Maximum number of concurrent inputs per container.
+</ParamField>
+
+<ParamField path="target_inputs" type="int">
+  Target number of concurrent inputs for autoscaling purposes.
+</ParamField>
+
+**Example:**
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+ModelConcurrent = Model.with_options(gpu="A100").with_concurrency(max_inputs=100)
+model = ModelConcurrent()
+result = model.predict.remote(42)
+```
+
+### cls.with_batching
+
+```python
+cls.with_batching(
+    *,
+    max_batch_size: int,
+    wait_ms: int,
+) -> Cls
+```
+
+Create an instance of the Cls with dynamic batching enabled or overridden.
+
+<ParamField path="max_batch_size" type="int" required>
+  Maximum batch size.
+</ParamField>
+
+<ParamField path="wait_ms" type="int" required>
+  Maximum time to wait for a batch in milliseconds.
+</ParamField>
+
+**Example:**
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+ModelBatched = Model.with_options(gpu="A100").with_batching(
+    max_batch_size=100,
+    wait_ms=1000
+)
+model = ModelBatched()
+result = model.predict.remote(42)
+```
+
+## Instance methods
+
+Once you create an instance of a Cls, you can call its methods:
+
+### instance.update_autoscaler
+
+```python
+instance.update_autoscaler(
+    *,
+    min_containers: Optional[int] = None,
+    max_containers: Optional[int] = None,
+    scaledown_window: Optional[int] = None,
+    buffer_containers: Optional[int] = None,
+) -> None
+```
+
+Override the current autoscaler behavior for this Cls instance.
+
+<ParamField path="min_containers" type="int">
+  Minimum number of containers to keep running.
+</ParamField>
+
+<ParamField path="max_containers" type="int">
+  Maximum number of containers allowed.
+</ParamField>
+
+<ParamField path="scaledown_window" type="int">
+  Time in seconds before scaling down idle containers.
+</ParamField>
+
+<ParamField path="buffer_containers" type="int">
+  Number of additional idle containers to maintain under active load.
+</ParamField>
+
+**Example:**
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+model = Model()
+model.update_autoscaler(min_containers=2, buffer_containers=1)
+```
+
+## Helper functions
+
+### modal.parameter
+
+```python
+modal.parameter(
+    *,
+    default: Any = ...,
+    init: bool = True,
+) -> Any
+```
+
+Used to specify options for Cls parameters, similar to `dataclass.field` for dataclasses.
+
+<ParamField path="default" type="Any">
+  Default value for the parameter.
+</ParamField>
+
+<ParamField path="init" type="bool" default="True">
+  If False, the field is not considered a parameter and not used in the constructor.
+</ParamField>
+
+**Example:**
+
+```python
+@app.cls()
+class MyModel:
+    model_name: str = modal.parameter()
+    max_tokens: int = modal.parameter(default=100)
+    internal_state: Any = modal.parameter(init=False)  # Not a constructor parameter
+```

@@ -1,0 +1,333 @@
+---
+title: Volume
+description: Persistent file storage for Modal functions
+---
+
+`Volume` provides writeable, persistent file storage that can be shared between one or more Modal functions. The contents of a volume are exposed as a filesystem, allowing you to share data between different functions or persist durable state across instances.
+
+## Key concepts
+
+Unlike a networked filesystem, you need to explicitly reload the volume to see changes made since it was mounted. Similarly, you need to explicitly commit any changes you make to the volume for the changes to become visible outside the current container.
+
+**Concurrent modification** is supported, but concurrent modifications of the same files should be avoided. Last write wins in case of concurrent modification of the same file - any data the last writer didn't have when committing changes will be lost.
+
+**Reloading requirement**: Volumes can only be reloaded if there are no open files. Attempting to reload with open files will result in an error.
+
+## Basic usage
+
+```python
+import modal
+
+app = modal.App()
+volume = modal.Volume.from_name("my-persisted-volume", create_if_missing=True)
+
+@app.function(volumes={"/root/foo": volume})
+def write_data():
+    with open("/root/foo/bar.txt", "w") as f:
+        f.write("hello")
+    volume.commit()  # Persist changes
+
+@app.function(volumes={"/root/foo": volume})
+def read_data():
+    volume.reload()  # Fetch latest changes
+    with open("/root/foo/bar.txt", "r") as f:
+        print(f.read())
+```
+
+## Creating volumes
+
+### Reference by name
+
+Create or reference a named volume that persists across app runs:
+
+```python
+volume = modal.Volume.from_name("my-volume", create_if_missing=True)
+```
+
+### Ephemeral volumes
+
+Create a temporary volume that exists only within a context manager:
+
+```python
+with modal.Volume.ephemeral() as vol:
+    vol.listdir("/")
+```
+
+```python
+async with modal.Volume.ephemeral() as vol:
+    await vol.listdir("/")
+```
+
+### Create from ID
+
+Reference a volume by its object ID:
+
+```python
+@app.function()
+def my_worker(volume_id: str):
+    vol = modal.Volume.from_id(volume_id)
+    for entry in vol.listdir("/"):
+        print(entry.path)
+
+with modal.Volume.ephemeral() as vol:
+    # Pass the volume ID to a remote function
+    my_worker.remote(vol.object_id)
+```
+
+## Managing volume contents
+
+### Committing changes
+
+```python
+@app.function(volumes={"/data": volume})
+def process():
+    with open("/data/output.txt", "w") as f:
+        f.write("results")
+    volume.commit()  # Persist changes to durable storage
+```
+
+If successful, changes are now persisted in durable storage and available to other containers accessing the volume.
+
+### Reloading changes
+
+```python
+@app.function(volumes={"/data": volume})
+def consume():
+    volume.reload()  # Fetch latest committed state
+    with open("/data/output.txt", "r") as f:
+        data = f.read()
+```
+
+<Warning>
+Reloading will fail if there are open files for the volume. Ensure all files are closed before calling `reload()`.
+</Warning>
+
+### Batch upload files
+
+Upload multiple files or directories efficiently:
+
+```python
+vol = modal.Volume.from_name("my-modal-volume")
+
+with vol.batch_upload() as batch:
+    batch.put_file("local-path.txt", "/remote-path.txt")
+    batch.put_directory("/local/directory/", "/remote/directory")
+    batch.put_file(io.BytesIO(b"some data"), "/foobar")
+```
+
+Set `force=True` to overwrite existing files:
+
+```python
+with vol.batch_upload(force=True) as batch:
+    batch.put_file("updated.txt", "/existing-file.txt")
+```
+
+### List files
+
+List all files in a directory:
+
+```python
+entries = vol.listdir("/data")
+for entry in entries:
+    print(f"{entry.path}: {entry.size} bytes")
+```
+
+List files recursively:
+
+```python
+entries = vol.listdir("/data", recursive=True)
+```
+
+Iterate over files:
+
+```python
+for entry in vol.iterdir("/data", recursive=True):
+    print(entry.path)
+```
+
+### Read files
+
+Read a file from the volume:
+
+```python
+vol = modal.Volume.from_name("my-modal-volume")
+data = b""
+for chunk in vol.read_file("1mb.csv"):
+    data += chunk
+print(len(data))  # File size in bytes
+```
+
+<Note>
+The `read_file` method is primarily intended for use outside of a Modal App. When the volume is mounted on a function, use normal filesystem operations instead.
+</Note>
+
+### Copy files
+
+Copy files within the volume:
+
+```python
+vol = modal.Volume.from_name("my-modal-volume")
+
+vol.copy_files(["bar/example.txt"], "bar2")  # Copy to another directory
+vol.copy_files(["bar/example.txt"], "bar/example2.txt")  # Rename a file
+```
+
+<Note>
+If the volume is already mounted on a Modal function, use normal filesystem operations like `os.rename()` and then `commit()` the volume.
+</Note>
+
+### Remove files
+
+Remove a file or directory:
+
+```python
+vol.remove_file("/path/to/file.txt")
+vol.remove_file("/path/to/directory", recursive=True)
+```
+
+## Read-only volumes
+
+Mount a volume as read-only to prevent accidental modifications:
+
+```python
+import modal
+
+app = modal.App()
+volume = modal.Volume.from_name("my-volume", create_if_missing=True)
+
+@app.function(volumes={"/mnt/items": volume.read_only()})
+def f():
+    with open("/mnt/items/my-file.txt") as f:
+        return f.read()
+```
+
+Any file system write operation into the mounted volume will result in an error.
+
+## Managing volumes
+
+The `Volume.objects` namespace provides methods for managing named volumes.
+
+### Create a volume
+
+```python
+modal.Volume.objects.create("my-volume")
+```
+
+Create in a specific environment:
+
+```python
+modal.Volume.objects.create("my-volume", environment_name="dev")
+```
+
+Allow creation if volume already exists:
+
+```python
+modal.Volume.objects.create("my-volume", allow_existing=True)
+```
+
+### List volumes
+
+List all volumes in the active environment:
+
+```python
+volumes = modal.Volume.objects.list()
+print([v.name for v in volumes])
+```
+
+Limit results:
+
+```python
+volumes = modal.Volume.objects.list(max_objects=10, created_before="2025-01-01")
+```
+
+### Delete a volume
+
+```python
+await modal.Volume.objects.delete("my-volume")
+```
+
+<Warning>
+This deletes an **entire Volume**, not just a specific file. Deletion is irreversible and will affect any Apps currently using the Volume.
+</Warning>
+
+### Rename a volume
+
+```python
+await modal.Volume.rename("old-name", "new-name")
+```
+
+## API reference
+
+### Volume methods
+
+<ParamField path="commit" type="method">
+  Commit changes to a mounted volume, persisting them in durable storage.
+</ParamField>
+
+<ParamField path="reload" type="method">
+  Make latest committed state of volume available in the running container. Will fail if there are open files.
+</ParamField>
+
+<ParamField path="listdir" type="method">
+  List all files under a path prefix. Returns a list of `FileEntry` objects.
+  
+  **Parameters:**
+  - `path` (str): Directory or file path
+  - `recursive` (bool): If True, list files recursively. Default: False
+</ParamField>
+
+<ParamField path="iterdir" type="method">
+  Iterate over all files in a directory. Yields `FileEntry` objects.
+  
+  **Parameters:**
+  - `path` (str): Directory or file path
+  - `recursive` (bool): If True, iterate recursively. Default: True
+</ParamField>
+
+<ParamField path="read_file" type="method">
+  Read a file from the volume. Yields bytes chunks.
+  
+  **Parameters:**
+  - `path` (str): Path to the file
+</ParamField>
+
+<ParamField path="remove_file" type="method">
+  Remove a file or directory from the volume.
+  
+  **Parameters:**
+  - `path` (str): Path to remove
+  - `recursive` (bool): If True, remove directories recursively. Default: False
+</ParamField>
+
+<ParamField path="copy_files" type="method">
+  Copy files within the volume.
+  
+  **Parameters:**
+  - `src_paths` (list[str]): List of source paths
+  - `dst_path` (str): Destination path
+  - `recursive` (bool): If True, copy directories recursively. Default: False
+</ParamField>
+
+<ParamField path="batch_upload" type="context manager">
+  Context manager for batch-uploading files to a volume.
+  
+  **Parameters:**
+  - `force` (bool): If True, overwrite existing files. Default: False
+</ParamField>
+
+<ParamField path="read_only" type="method">
+  Configure Volume to mount as read-only. Returns a new Volume instance.
+</ParamField>
+
+<ParamField path="info" type="method">
+  Return information about the Volume object. Returns a `VolumeInfo` dataclass with `name`, `created_at`, and `created_by` fields.
+</ParamField>
+
+### FileEntry
+
+The `FileEntry` dataclass represents a file or directory entry:
+
+- `path` (str): File path
+- `type` (FileEntryType): FILE, DIRECTORY, SYMLINK, FIFO, or SOCKET
+- `mtime` (int): Modification time
+- `size` (int): File size in bytes

@@ -1,0 +1,268 @@
+---
+title: Images
+description: Create and manage Modal container images in Go
+---
+
+Images define the container environment for your Modal Functions and Sandboxes.
+
+## Creating images
+
+### FromRegistry
+
+Creates an Image from a public or private container registry.
+
+```go
+// Public image
+image := mc.Images.FromRegistry("python:3.11-slim", nil)
+
+// Private image with authentication
+secret, _ := mc.Secrets.FromName(ctx, "docker-hub-secret", nil)
+image := mc.Images.FromRegistry("myorg/private-image:latest", &modal.ImageFromRegistryParams{
+    Secret: secret,
+})
+```
+
+<ParamField path="tag" type="string" required>
+  The image tag (e.g., "python:3.11-slim", "ubuntu:22.04")
+</ParamField>
+
+<ParamField path="params" type="*ImageFromRegistryParams">
+  Optional parameters
+  
+  <ParamField path="Secret" type="*Secret">
+    Secret for private registry authentication
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Image` - The Image instance
+
+### FromAwsEcr
+
+Creates an Image from AWS ECR.
+
+```go
+secret, _ := mc.Secrets.FromName(ctx, "aws-secret", nil)
+image := mc.Images.FromAwsEcr("123456789.dkr.ecr.us-east-1.amazonaws.com/my-image:latest", secret)
+```
+
+<ParamField path="tag" type="string" required>
+  The ECR image tag
+</ParamField>
+
+<ParamField path="secret" type="*Secret" required>
+  AWS credentials secret
+</ParamField>
+
+**Returns:**
+- `*Image` - The Image instance
+
+### FromGcpArtifactRegistry
+
+Creates an Image from GCP Artifact Registry.
+
+```go
+secret, _ := mc.Secrets.FromName(ctx, "gcp-secret", nil)
+image := mc.Images.FromGcpArtifactRegistry("us-docker.pkg.dev/project/repo/image:tag", secret)
+```
+
+<ParamField path="tag" type="string" required>
+  The Artifact Registry image tag
+</ParamField>
+
+<ParamField path="secret" type="*Secret" required>
+  GCP credentials secret
+</ParamField>
+
+**Returns:**
+- `*Image` - The Image instance
+
+### FromID
+
+Looks up an existing Image by its ID.
+
+```go
+image, err := mc.Images.FromID(ctx, "im-123abc")
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="imageID" type="string" required>
+  The Image ID
+</ParamField>
+
+**Returns:**
+- `*Image` - The Image instance
+- `error` - NotFoundError if the Image doesn't exist
+
+## Image methods
+
+### DockerfileCommands
+
+Extends an Image with Dockerfile-like commands. Returns a new Image.
+
+```go
+image := mc.Images.FromRegistry("python:3.11-slim", nil)
+
+image = image.DockerfileCommands([]string{
+    "RUN apt-get update && apt-get install -y git",
+    "RUN pip install numpy pandas",
+}, nil)
+
+// With build options
+image = image.DockerfileCommands([]string{
+    "RUN pip install torch",
+}, &modal.ImageDockerfileCommandsParams{
+    GPU:        "T4",
+    ForceBuild: true,
+})
+```
+
+<ParamField path="commands" type="[]string" required>
+  List of Dockerfile commands (without the base FROM instruction)
+</ParamField>
+
+<ParamField path="params" type="*ImageDockerfileCommandsParams">
+  Build options for this layer
+  
+  <ParamField path="Env" type="map[string]string">
+    Environment variables for the build
+  </ParamField>
+  
+  <ParamField path="Secrets" type="[]*Secret">
+    Secrets to make available during build
+  </ParamField>
+  
+  <ParamField path="GPU" type="string">
+    GPU to use for build (e.g., "T4", "A100:2")
+  </ParamField>
+  
+  <ParamField path="ForceBuild" type="bool">
+    Force rebuild, ignoring cache
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Image` - A new Image with the commands added as a layer
+
+<Warning>
+  `COPY` commands that copy from local context are not yet supported. Use `COPY --from=` to copy from other images.
+</Warning>
+
+### Build
+
+Eagerly builds the Image on Modal. This is called automatically when creating Sandboxes.
+
+```go
+app, _ := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+    CreateIfMissing: true,
+})
+
+image, err := image.Build(ctx, app)
+if err != nil {
+    // Handle error
+}
+
+fmt.Printf("Built image: %s\n", image.ImageID)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="app" type="*App" required>
+  The App to associate the build with
+</ParamField>
+
+**Returns:**
+- `*Image` - The built Image (same instance with ImageID set)
+- `error` - Error if the build fails
+
+## Managing images
+
+### Delete
+
+Deletes an Image by ID.
+
+```go
+err := mc.Images.Delete(ctx, "im-123abc", nil)
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="imageID" type="string" required>
+  The ID of the Image to delete
+</ParamField>
+
+<ParamField path="params" type="*ImageDeleteParams">
+  Optional parameters (currently none defined)
+</ParamField>
+
+**Returns:**
+- `error` - NotFoundError if the Image doesn't exist
+
+<Warning>
+  Deletion is irreversible and will prevent Functions/Sandboxes from using the Image. Deleting an Image does not delete its intermediate layers.
+</Warning>
+
+## Image type
+
+<ResponseField name="ImageID" type="string">
+  The unique identifier for the Image (set after building)
+</ResponseField>
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    // Create a custom image
+    image := mc.Images.FromRegistry("python:3.11-slim", nil)
+
+    // Add dependencies
+    image = image.DockerfileCommands([]string{
+        "RUN apt-get update && apt-get install -y curl git",
+        "RUN pip install requests numpy",
+    }, nil)
+
+    // Build the image
+    app, _ := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+        CreateIfMissing: true,
+    })
+
+    builtImage, err := image.Build(ctx, app)
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("Image built successfully: %s\n", builtImage.ImageID)
+
+    // Use the image with a Sandbox
+    sb, _ := mc.Sandboxes.Create(ctx, app, builtImage, nil)
+    defer sb.Terminate(ctx, nil)
+
+    // The image is now ready to use
+}
+```

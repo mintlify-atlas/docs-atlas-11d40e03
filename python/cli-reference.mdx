@@ -1,0 +1,477 @@
+---
+title: CLI reference
+description: Complete reference for Modal's command-line interface commands.
+---
+
+The Modal CLI provides commands for deploying, managing, and monitoring your applications. Access it via `modal` or `python -m modal`.
+
+## Global options
+
+```bash
+modal --help               # Show help message
+modal --version            # Show Modal client version
+modal --profile PROFILE    # Use a specific authentication profile
+```
+
+## Core commands
+
+### modal run
+
+Run a Modal app or function from a Python file:
+
+```bash
+modal run app.py
+modal run app.py::function_name
+modal run app.py --env staging
+```
+
+<ParamField path="file_or_module" type="string" required>
+  Path to Python file or module to run. Can include `::function_name` to run a specific function.
+</ParamField>
+
+<ParamField path="--env" type="string">
+  Environment name to run in (e.g., "staging", "production")
+</ParamField>
+
+<ParamField path="--detach" type="boolean">
+  Run the app in detached mode (don't stream logs)
+</ParamField>
+
+### modal deploy
+
+Deploy a Modal app:
+
+```bash
+modal deploy app.py
+modal deploy app.py --name my-app
+modal deploy app.py --env production
+```
+
+<ParamField path="file_or_module" type="string" required>
+  Path to Python file or module to deploy
+</ParamField>
+
+<ParamField path="--name" type="string">
+  Name for the deployment
+</ParamField>
+
+<ParamField path="--env" type="string">
+  Environment to deploy to
+</ParamField>
+
+### modal serve
+
+Run a Modal app in development mode with auto-reload:
+
+```bash
+modal serve app.py
+modal serve app.py --timeout 60
+```
+
+<ParamField path="file_or_module" type="string" required>
+  Path to Python file or module to serve
+</ParamField>
+
+<ParamField path="--timeout" type="number">
+  Timeout in seconds for idle containers
+</ParamField>
+
+### modal shell
+
+Open an interactive shell in a Modal container:
+
+```bash
+modal shell
+modal shell --image python:3.11
+modal shell --gpu T4
+```
+
+<ParamField path="--image" type="string">
+  Container image to use
+</ParamField>
+
+<ParamField path="--gpu" type="string">
+  GPU type to attach (e.g., "T4", "A10G", "A100")
+</ParamField>
+
+<ParamField path="--cpu" type="number">
+  Number of CPU cores
+</ParamField>
+
+<ParamField path="--memory" type="number">
+  Memory in MB
+</ParamField>
+
+## App management
+
+### modal app list
+
+List deployed and running apps:
+
+```bash
+modal app list
+modal app list --env production
+modal app list --json
+```
+
+<ParamField path="--env" type="string">
+  Filter by environment
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output as JSON
+</ParamField>
+
+### modal app logs
+
+Stream logs from a running app:
+
+```bash
+modal app logs ap-123456
+modal app logs my-app-name
+modal app logs my-app --timestamps
+```
+
+<ParamField path="app_identifier" type="string" required>
+  App name or ID (format: `ap-*`)
+</ParamField>
+
+<ParamField path="--timestamps" type="boolean">
+  Include timestamps in log output
+</ParamField>
+
+<ParamField path="--env" type="string">
+  Environment name
+</ParamField>
+
+### modal app stop
+
+Stop a running app:
+
+```bash
+modal app stop ap-123456
+modal app stop my-app-name
+```
+
+## Storage management
+
+### modal volume
+
+Manage persistent volumes:
+
+```bash
+# List volumes
+modal volume list
+
+# Create a volume
+modal volume create my-volume
+
+# Delete a volume
+modal volume delete my-volume
+
+# List files in a volume
+modal volume ls my-volume /path
+
+# Download from volume
+modal volume get my-volume /remote/path /local/path
+
+# Upload to volume
+modal volume put my-volume /local/path /remote/path
+```
+
+### modal dict
+
+Manage distributed dictionaries:
+
+```bash
+# List dicts
+modal dict list
+
+# Create a dict
+modal dict create my-dict
+
+# Delete a dict
+modal dict delete my-dict
+
+# Get a value
+modal dict get my-dict key
+
+# Set a value  
+modal dict put my-dict key value
+```
+
+### modal secret
+
+Manage secrets:
+
+```bash
+# List secrets
+modal secret list
+
+# Create a secret
+modal secret create my-secret KEY1=value1 KEY2=value2
+
+# Delete a secret
+modal secret delete my-secret
+```
+
+### modal queue
+
+Manage queues:
+
+```bash
+# List queues
+modal queue list
+
+# Create a queue
+modal queue create my-queue
+
+# Delete a queue
+modal queue delete my-queue
+
+# Get queue length
+modal queue len my-queue
+```
+
+## Configuration
+
+### modal token
+
+Manage authentication tokens:
+
+```bash
+# Create a new token
+modal token new
+
+# Create token for a profile
+modal token new --profile work
+
+# List tokens
+modal token list
+
+# Set active token
+modal token set TOKEN_ID
+```
+
+### modal profile
+
+Manage authentication profiles:
+
+```bash
+# List profiles
+modal profile list
+
+# Set active profile
+modal profile activate my-profile
+
+# Create new profile
+modal token new --profile new-profile
+```
+
+### modal config
+
+Manage Modal configuration:
+
+```bash
+# Show current configuration
+modal config show
+
+# Set configuration value
+modal config set key value
+```
+
+### modal environment
+
+Manage deployment environments:
+
+```bash
+# List environments
+modal environment list
+
+# Create environment
+modal environment create staging
+
+# Delete environment
+modal environment delete staging
+```
+
+## Observability
+
+### modal dashboard
+
+Open the Modal dashboard in your browser:
+
+```bash
+modal dashboard
+```
+
+### modal billing
+
+View billing information:
+
+```bash
+# Show current usage
+modal billing usage
+
+# Show billing history
+modal billing history
+```
+
+### modal changelog
+
+View Modal changelog:
+
+```bash
+modal changelog
+```
+
+## Container management
+
+### modal container
+
+Manage running containers:
+
+```bash
+# List containers
+modal container list
+
+# Get container logs
+modal container logs fc-123456
+
+# Execute command in container
+modal container exec fc-123456 -- python script.py
+
+# Stop a container
+modal container stop fc-123456
+```
+
+## Setup and initialization
+
+### modal setup
+
+Bootstrap Modal configuration (same as `modal token new`):
+
+```bash
+modal setup
+modal setup --profile my-profile
+```
+
+This command:
+1. Opens your browser for authentication
+2. Creates a new authentication token
+3. Saves credentials to `~/.modal.toml`
+
+## Advanced commands
+
+### modal launch
+
+Launch common development tools:
+
+```bash
+# Launch Jupyter notebook
+modal launch jupyter
+
+# Launch VS Code server
+modal launch vscode
+```
+
+### modal nfs
+
+Manage network file systems (hidden command):
+
+```bash
+modal nfs list
+modal nfs create my-nfs
+```
+
+<Note>
+  NetworkFileSystem commands are available but not shown in help by default.
+</Note>
+
+## Environment variables
+
+The Modal CLI respects these environment variables:
+
+- `MODAL_ENVIRONMENT` - Default environment for deployments
+- `MODAL_PROFILE` - Default authentication profile
+- `MODAL_TOKEN_ID` - Token ID to use for authentication
+- `MODAL_TOKEN_SECRET` - Token secret for authentication
+
+## Exit codes
+
+The Modal CLI uses standard exit codes:
+
+- `0` - Success
+- `1` - General error
+- `2` - Command-line usage error
+
+## Getting help
+
+Every command supports the `--help` flag:
+
+```bash
+modal --help
+modal run --help
+modal app --help
+modal volume list --help
+```
+
+## Examples
+
+<AccordionGroup>
+  <Accordion title="Deploy an app to production">
+    ```bash
+    modal deploy app.py --env production --name my-production-app
+    ```
+  </Accordion>
+
+  <Accordion title="Debug a running app">
+    ```bash
+    # Get app ID
+    modal app list
+    
+    # Stream logs
+    modal app logs ap-123456 --timestamps
+    
+    # Check containers
+    modal container list
+    ```
+  </Accordion>
+
+  <Accordion title="Manage data in volumes">
+    ```bash
+    # Upload data
+    modal volume put my-data ./local/data /remote/data
+    
+    # List contents
+    modal volume ls my-data /remote/data
+    
+    # Download results
+    modal volume get my-data /remote/results ./local/results
+    ```
+  </Accordion>
+
+  <Accordion title="Work with multiple environments">
+    ```bash
+    # Deploy to staging
+    modal deploy app.py --env staging
+    
+    # Test in staging
+    modal run app.py --env staging
+    
+    # Deploy to production
+    modal deploy app.py --env production
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Basic usage" icon="rocket" href="/python/basic-usage">
+    Learn how to write Modal functions
+  </Card>
+  <Card title="API reference" icon="book" href="/docs/reference">
+    Explore the Python API
+  </Card>
+</CardGroup>

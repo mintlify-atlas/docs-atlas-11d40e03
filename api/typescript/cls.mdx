@@ -1,0 +1,300 @@
+---
+title: Cls
+description: Reference and instantiate deployed Modal classes
+---
+
+The Cls API allows you to reference deployed Modal classes and call their methods remotely.
+
+## Access the Cls API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const cls = await modal.cls.fromName("my-app", "MyClass");
+```
+
+## Methods
+
+### `modal.cls.fromName(appName, name, params?)`
+
+Reference a Cls from a deployed App by its name.
+
+<ParamField path="appName" type="string" required>
+  Name of the App containing the class.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Name of the class to reference.
+</ParamField>
+
+<ParamField path="params" type="ClsFromNameParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name to use.
+    </ParamField>
+    
+    <ParamField path="createIfMissing" type="boolean" optional>
+      If `true`, creates the class if it doesn't exist.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Cls>">
+  The referenced Cls object.
+</ResponseField>
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "Model");
+```
+
+## Cls object
+
+The `Cls` object represents a deployed Modal class. You must create an instance before calling methods.
+
+### Methods
+
+#### `instance(parameters?)`
+
+Create an instance of the class with optional parameters.
+
+<ParamField path="parameters" type="Record<string, any>" optional>
+  Constructor parameters for the class. The parameter types must match the class definition.
+</ParamField>
+
+<ResponseField name="return" type="Promise<ClsInstance>">
+  A class instance that can be used to call methods.
+</ResponseField>
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "Model");
+
+// Create an instance without parameters
+const instance = await cls.instance();
+
+// Create an instance with parameters
+const instance = await cls.instance({
+  model_name: "gpt-4",
+  temperature: 0.7,
+});
+```
+
+#### `withOptions(options)`
+
+Override the static Function configuration at runtime.
+
+<ParamField path="options" type="ClsWithOptionsParams" required>
+  Runtime configuration options
+  
+  <Expandable title="properties">
+    <ParamField path="cpu" type="number" optional>
+      CPU reservation in cores (can be fractional).
+    </ParamField>
+    
+    <ParamField path="cpuLimit" type="number" optional>
+      CPU hard limit in cores.
+    </ParamField>
+    
+    <ParamField path="memoryMiB" type="number" optional>
+      Memory reservation in MiB.
+    </ParamField>
+    
+    <ParamField path="memoryLimitMiB" type="number" optional>
+      Memory hard limit in MiB.
+    </ParamField>
+    
+    <ParamField path="gpu" type="string" optional>
+      GPU configuration (e.g., `"A100"`, `"T4:2"`).
+    </ParamField>
+    
+    <ParamField path="env" type="Record<string, string>" optional>
+      Environment variables to set.
+    </ParamField>
+    
+    <ParamField path="secrets" type="Secret[]" optional>
+      Secrets to inject as environment variables.
+    </ParamField>
+    
+    <ParamField path="volumes" type="Record<string, Volume>" optional>
+      Volumes to mount at specified paths.
+    </ParamField>
+    
+    <ParamField path="retries" type="number | Retries" optional>
+      Retry configuration for method calls.
+    </ParamField>
+    
+    <ParamField path="maxContainers" type="number" optional>
+      Maximum concurrent containers.
+    </ParamField>
+    
+    <ParamField path="bufferContainers" type="number" optional>
+      Buffer containers for burst capacity.
+    </ParamField>
+    
+    <ParamField path="scaledownWindowMs" type="number" optional>
+      Scaledown window in milliseconds (must be a multiple of 1000).
+    </ParamField>
+    
+    <ParamField path="timeoutMs" type="number" optional>
+      Method execution timeout in milliseconds (must be a multiple of 1000).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Cls">
+  A new Cls object with the specified options.
+</ResponseField>
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "Model");
+
+// Override GPU configuration
+const clsWithGpu = cls.withOptions({
+  gpu: "A100",
+  memoryMiB: 8192,
+});
+
+const instance = await clsWithGpu.instance();
+```
+
+#### `withConcurrency(params)`
+
+Create a version of the class with input concurrency enabled or overridden.
+
+<ParamField path="params" type="ClsWithConcurrencyParams" required>
+  Concurrency configuration
+  
+  <Expandable title="properties">
+    <ParamField path="maxInputs" type="number" required>
+      Maximum number of concurrent inputs to process.
+    </ParamField>
+    
+    <ParamField path="targetInputs" type="number" optional>
+      Target number of concurrent inputs (for autoscaling).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Cls">
+  A new Cls object with concurrency enabled.
+</ResponseField>
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "Worker");
+
+const clsConcurrent = cls.withConcurrency({
+  maxInputs: 10,
+  targetInputs: 5,
+});
+
+const instance = await clsConcurrent.instance();
+```
+
+#### `withBatching(params)`
+
+Create a version of the class with dynamic batching enabled or overridden.
+
+<ParamField path="params" type="ClsWithBatchingParams" required>
+  Batching configuration
+  
+  <Expandable title="properties">
+    <ParamField path="maxBatchSize" type="number" required>
+      Maximum batch size.
+    </ParamField>
+    
+    <ParamField path="waitMs" type="number" required>
+      Time to wait in milliseconds before processing a partial batch.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Cls">
+  A new Cls object with batching enabled.
+</ResponseField>
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "Embedder");
+
+const clsBatched = cls.withBatching({
+  maxBatchSize: 32,
+  waitMs: 100,
+});
+
+const instance = await clsBatched.instance();
+```
+
+## ClsInstance object
+
+Represents an instance of a deployed Modal class.
+
+### Methods
+
+#### `method(name)`
+
+Get a reference to a class method.
+
+<ParamField path="name" type="string" required>
+  Name of the method to call.
+</ParamField>
+
+<ResponseField name="return" type="Function_">
+  A Function object that can be invoked with `remote()` or `spawn()`.
+</ResponseField>
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "Model");
+const instance = await cls.instance();
+
+const generateMethod = instance.method("generate");
+const result = await generateMethod.remote(["Hello world"]);
+```
+
+## Example: Using a parameterized class
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+// Reference the deployed class
+const modelCls = await modal.cls.fromName("my-app", "LLM");
+
+// Create an instance with specific parameters
+const instance = await modelCls.instance({
+  model_name: "gpt-4",
+  temperature: 0.8,
+  max_tokens: 1000,
+});
+
+// Call a method on the instance
+const generateMethod = instance.method("generate");
+const response = await generateMethod.remote([
+  "Explain quantum computing"
+]);
+
+console.log(response);
+```
+
+## Example: Override runtime configuration
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const cls = await modal.cls.fromName("my-app", "Trainer");
+
+// Use more powerful hardware for training
+const clsWithGpu = cls.withOptions({
+  gpu: "A100:4",
+  memoryMiB: 32768,
+  timeoutMs: 3600000, // 1 hour
+});
+
+const instance = await clsWithGpu.instance();
+const trainMethod = instance.method("train");
+
+await trainMethod.remote(["dataset.csv"]);
+```

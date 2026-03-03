@@ -1,0 +1,326 @@
+---
+title: Tunnels
+description: Forward ports from Modal containers to the public internet with modal.forward()
+---
+
+## Overview
+
+The `modal.forward()` function creates a tunnel that exposes a port from inside a running Modal container to the public internet with TLS encryption. This is useful for development, debugging, and running custom network services.
+
+<Warning>
+This is an experimental API which may change in the future.
+</Warning>
+
+## Basic usage
+
+Expose an HTTP server running inside a container:
+
+```python
+import modal
+from flask import Flask
+
+app = modal.App(
+    image=modal.Image.debian_slim().pip_install("Flask")
+)
+
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def hello_world():
+    return "Hello, World!"
+
+@app.function()
+def run_app():
+    # Start server on port 8000 inside the container
+    with modal.forward(8000) as tunnel:
+        # Tunnel is now active and publicly accessible
+        print("Server listening at", tunnel.url)
+        flask_app.run("0.0.0.0", 8000)
+    
+    # Tunnel is closed when context exits
+```
+
+## Tunnel object
+
+The `modal.forward()` context manager returns a `Tunnel` object with several useful properties:
+
+### HTTPS URL
+
+```python
+with modal.forward(8000) as tunnel:
+    print(tunnel.url)  # https://example.modal.run
+    # URL includes port if not 443
+```
+
+### TLS socket
+
+Get the host and port as a tuple:
+
+```python
+with modal.forward(8000) as tunnel:
+    host, port = tunnel.tls_socket
+    print(f"Connect with TLS to {host}:{port}")
+```
+
+### TCP socket (unencrypted)
+
+Access raw TCP connection details:
+
+```python
+with modal.forward(8000, unencrypted=True) as tunnel:
+    host, port = tunnel.tcp_socket
+    print(f"Connect with TCP to {host}:{port}")
+```
+
+<Note>
+The `tcp_socket` property requires `unencrypted=True` in the `forward()` call.
+</Note>
+
+## Configuration options
+
+### Unencrypted TCP
+
+Expose the port without TLS encryption:
+
+```python
+with modal.forward(8000, unencrypted=True) as tunnel:
+    # Access via both HTTPS and raw TCP
+    print("HTTPS:", tunnel.url)
+    print("TCP:", tunnel.tcp_socket)
+```
+
+<Warning>
+Unencrypted tunnels expose your service on the public internet without encryption. Only use this for secure protocols like SSH that provide their own encryption.
+</Warning>
+
+### HTTP/2 support
+
+Enable HTTP/2 for the TLS server:
+
+```python
+with modal.forward(8000, h2_enabled=True) as tunnel:
+    print("HTTP/2 enabled:", tunnel.url)
+```
+
+<Note>
+HTTP/2 can only be enabled on encrypted (TLS) connections. You cannot use `h2_enabled=True` with `unencrypted=True`.
+</Note>
+
+## Use cases
+
+### Echo server (raw TCP)
+
+Create a TCP echo server accessible over the internet:
+
+```python
+import socket
+import threading
+import modal
+
+def run_echo_server(port: int):
+    """Run a TCP echo server listening on the given port."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("0.0.0.0", port))
+    sock.listen(1)
+    
+    while True:
+        conn, addr = sock.accept()
+        print("Connection from:", addr)
+        
+        def handle(conn):
+            with conn:
+                while True:
+                    data = conn.recv(1024)
+                    if not data:
+                        break
+                    conn.sendall(data)
+        
+        threading.Thread(target=handle, args=(conn,)).start()
+
+app = modal.App()
+
+@app.function()
+def tcp_tunnel():
+    with modal.forward(8000, unencrypted=True) as tunnel:
+        host, port = tunnel.tcp_socket
+        print(f"TCP echo server at {host}:{port}")
+        print(f"Test with: nc {host} {port}")
+        run_echo_server(8000)
+```
+
+### SSH into a container
+
+Create an SSH tunnel to access a Modal container:
+
+```python
+import subprocess
+import time
+import modal
+
+app = modal.App()
+
+image = (
+    modal.Image.debian_slim()
+    .apt_install("openssh-server")
+    .run_commands("mkdir /run/sshd")
+    .add_local_file("~/.ssh/id_rsa.pub", "/root/.ssh/authorized_keys", copy=True)
+)
+
+@app.function(image=image, timeout=3600)
+def ssh_access():
+    # Start SSH daemon
+    subprocess.Popen(["/usr/sbin/sshd", "-D", "-e"])
+    
+    # Forward SSH port to public internet
+    with modal.forward(port=22, unencrypted=True) as tunnel:
+        hostname, port = tunnel.tcp_socket
+        connection_cmd = f'ssh -p {port} root@{hostname}'
+        print(f"SSH into container using: {connection_cmd}")
+        
+        # Keep container alive for 1 hour
+        time.sleep(3600)
+```
+
+<Tip>
+For production SSH access, consider using an `@modal.enter()` lifecycle method in an `@app.cls()` to create a persistent SSH server per container.
+</Tip>
+
+### Development web server
+
+Quickly expose a development server:
+
+```python
+import modal
+
+app = modal.App(
+    image=modal.Image.debian_slim().pip_install("uvicorn", "fastapi")
+)
+
+@app.function()
+def dev_server():
+    import subprocess
+    
+    with modal.forward(8000) as tunnel:
+        print(f"Development server: {tunnel.url}")
+        subprocess.run([
+            "uvicorn", "main:app",
+            "--host", "0.0.0.0",
+            "--port", "8000",
+            "--reload"
+        ])
+```
+
+## Error handling
+
+### Port already in use
+
+You cannot forward the same port twice:
+
+```python
+with modal.forward(8000) as tunnel1:
+    try:
+        with modal.forward(8000) as tunnel2:
+            pass  # This will raise InvalidError
+    except modal.exception.InvalidError as e:
+        print(f"Port already forwarded: {e}")
+```
+
+### Invalid port numbers
+
+```python
+# Must be an integer between 1 and 65535
+try:
+    with modal.forward(70000) as tunnel:
+        pass
+except modal.exception.InvalidError:
+    print("Invalid port number")
+```
+
+### Container-only usage
+
+`modal.forward()` only works inside Modal containers:
+
+```python
+import modal
+
+# This will raise InvalidError if run locally
+try:
+    with modal.forward(8000) as tunnel:
+        pass
+except modal.exception.InvalidError:
+    print("Can only forward ports from inside containers")
+```
+
+## Best practices
+
+<Steps>
+
+### Use context managers
+
+Always use `with` statements to ensure tunnels are properly closed:
+
+```python
+# ✓ Good - tunnel auto-closes
+with modal.forward(8000) as tunnel:
+    serve_on_port_8000()
+
+# ✗ Bad - tunnel may not close properly
+tunnel = modal.forward(8000)
+```
+
+### Secure your services
+
+Even with TLS, your service is publicly accessible. Implement authentication:
+
+```python
+@app.function()
+def secure_server():
+    with modal.forward(8000) as tunnel:
+        print(f"Server at {tunnel.url}")
+        # Run server with authentication enabled
+        run_authenticated_server(port=8000)
+```
+
+### Use appropriate timeouts
+
+Set function timeouts to match your tunnel lifetime:
+
+```python
+@app.function(timeout=3600)  # 1 hour
+def long_running_tunnel():
+    with modal.forward(8000) as tunnel:
+        # Tunnel stays open for up to 1 hour
+        time.sleep(3600)
+```
+
+### Log connection details
+
+Always print the tunnel URL/socket for easy access:
+
+```python
+with modal.forward(8000) as tunnel:
+    print(f"Connect at: {tunnel.url}")
+    print(f"TLS socket: {tunnel.tls_socket}")
+```
+
+</Steps>
+
+## Comparison with web endpoints
+
+| Feature | `modal.forward()` | `@modal.web_server` |
+|---------|-------------------|---------------------|
+| Use case | Development/debugging | Production deployments |
+| Lifecycle | Explicit context manager | Managed by Modal |
+| Scaling | No auto-scaling | Auto-scales |
+| Permanence | Temporary | Persistent |
+| Setup | Manual tunnel creation | Declarative decorator |
+
+<Tip>
+For production HTTP services, use `@modal.web_server` or other web decorators. Use `modal.forward()` for development, debugging, and custom protocols.
+</Tip>
+
+## Related resources
+
+- [Web endpoints](/advanced/web-endpoints)
+- [Container lifecycle](/advanced/container-lifecycle)
+- [Networking guide](https://modal.com/docs/guide/networking)

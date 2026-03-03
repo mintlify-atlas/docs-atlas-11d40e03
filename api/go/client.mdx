@@ -1,0 +1,206 @@
+---
+title: Client
+description: Modal client initialization and configuration for Go
+---
+
+The Modal client is the main entry point for interacting with Modal resources in Go.
+
+## Creating a client
+
+### NewClient
+
+Creates a new Modal client with default configuration from environment variables and `~/.modal.toml`.
+
+```go
+import "github.com/modal-labs/modal-client/go"
+
+mc, err := modal.NewClient()
+if err != nil {
+    // Handle error
+}
+defer mc.Close()
+```
+
+**Returns:**
+- `*Client` - The Modal client instance
+- `error` - Error if initialization fails
+
+### NewClientWithOptions
+
+Creates a new Modal client with custom configuration.
+
+```go
+mc, err := modal.NewClientWithOptions(&modal.ClientParams{
+    TokenID:     "ak-...",
+    TokenSecret: "as-...",
+    Environment: "main",
+})
+if err != nil {
+    // Handle error
+}
+defer mc.Close()
+```
+
+<ParamField path="params" type="*ClientParams">
+  Client configuration parameters
+  
+  <ParamField path="TokenID" type="string">
+    Modal token ID (overrides config file)
+  </ParamField>
+  
+  <ParamField path="TokenSecret" type="string">
+    Modal token secret (overrides config file)
+  </ParamField>
+  
+  <ParamField path="Environment" type="string">
+    Environment name (e.g., "main", "dev")
+  </ParamField>
+  
+  <ParamField path="Config" type="*config">
+    Custom config object (advanced usage)
+  </ParamField>
+  
+  <ParamField path="Logger" type="*slog.Logger">
+    Custom logger instance
+  </ParamField>
+  
+  <ParamField path="ControlPlaneClient" type="pb.ModalClientClient">
+    Custom gRPC client for testing
+  </ParamField>
+  
+  <ParamField path="ControlPlaneConn" type="*grpc.ClientConn">
+    Underlying gRPC connection for ControlPlaneClient
+  </ParamField>
+  
+  <ParamField path="GRPCUnaryInterceptors" type="[]grpc.UnaryClientInterceptor">
+    Custom gRPC unary interceptors for telemetry and observability
+  </ParamField>
+  
+  <ParamField path="GRPCStreamInterceptors" type="[]grpc.StreamClientInterceptor">
+    Custom gRPC stream interceptors for telemetry and observability
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Client` - The Modal client instance
+- `error` - Error if initialization fails
+
+## Client methods
+
+### Close
+
+Closes all gRPC connections. Should be called when done using the client.
+
+```go
+mc.Close()
+```
+
+### Version
+
+Returns the SDK version.
+
+```go
+version := mc.Version()
+fmt.Println("SDK version:", version)
+```
+
+**Returns:**
+- `string` - The SDK version string
+
+## Client services
+
+The client exposes the following services for interacting with Modal resources:
+
+<ResponseField name="Apps" type="AppService">
+  Service for working with Modal Apps. See [Apps API](/api/go/apps).
+</ResponseField>
+
+<ResponseField name="CloudBucketMounts" type="CloudBucketMountService">
+  Service for mounting cloud storage buckets.
+</ResponseField>
+
+<ResponseField name="Cls" type="ClsService">
+  Service for working with Modal classes. See [Cls API](/api/go/cls).
+</ResponseField>
+
+<ResponseField name="Functions" type="FunctionService">
+  Service for working with Modal Functions. See [Functions API](/api/go/functions).
+</ResponseField>
+
+<ResponseField name="FunctionCalls" type="FunctionCallService">
+  Service for working with Function Calls.
+</ResponseField>
+
+<ResponseField name="Images" type="ImageService">
+  Service for working with Modal Images. See [Images API](/api/go/images).
+</ResponseField>
+
+<ResponseField name="Proxies" type="ProxyService">
+  Service for working with Modal Proxies.
+</ResponseField>
+
+<ResponseField name="Queues" type="QueueService">
+  Service for working with Modal Queues. See [Queues API](/api/go/queues).
+</ResponseField>
+
+<ResponseField name="Sandboxes" type="SandboxService">
+  Service for working with Modal Sandboxes. See [Sandboxes API](/api/go/sandboxes).
+</ResponseField>
+
+<ResponseField name="Secrets" type="SecretService">
+  Service for working with Modal Secrets. See [Secrets API](/api/go/secrets).
+</ResponseField>
+
+<ResponseField name="Volumes" type="VolumeService">
+  Service for working with Modal Volumes. See [Volumes API](/api/go/volumes).
+</ResponseField>
+
+## Complete example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "io"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+
+    mc, err := modal.NewClient()
+    if err != nil {
+        panic(err)
+    }
+    defer mc.Close()
+
+    app, err := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+        CreateIfMissing: true,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    image := mc.Images.FromRegistry("alpine:3.21", nil)
+    
+    sb, err := mc.Sandboxes.Create(ctx, app, image, nil)
+    if err != nil {
+        panic(err)
+    }
+    defer sb.Terminate(context.Background(), nil)
+
+    p, err := sb.Exec(ctx, []string{"echo", "Hello from Modal!"}, nil)
+    if err != nil {
+        panic(err)
+    }
+
+    stdout, err := io.ReadAll(p.Stdout)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Output: %s\n", stdout)
+}
+```

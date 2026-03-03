@@ -1,0 +1,206 @@
+---
+title: GPU configuration
+description: Configure GPU resources for your Modal functions
+---
+
+Modal supports a wide range of GPU types for accelerating compute-intensive workloads like machine learning training and inference.
+
+## Basic usage
+
+Attach a GPU to your function using the `gpu` parameter:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function(gpu="H100")
+def my_gpu_function():
+    # This will have 1 H100 GPU
+    pass
+```
+
+## GPU types
+
+Modal provides access to various NVIDIA GPU models. You can specify GPU types using simple string syntax:
+
+### String syntax
+
+The recommended way to configure GPUs is with strings:
+
+```python
+# Single GPU
+@app.function(gpu="H100")
+def f():
+    pass
+
+# Multiple GPUs
+@app.function(gpu="A100-80GB:4")
+def my_gpu_function():
+    # This will have 4 A100-80GB GPUs
+    pass
+```
+
+The syntax is `"GPU_TYPE"` for a single GPU or `"GPU_TYPE:COUNT"` for multiple GPUs.
+
+## Available GPU types
+
+### T4
+
+[NVIDIA T4 Tensor Core](https://www.nvidia.com/en-us/data-center/tesla-t4/) GPU - A low-cost data center GPU based on the Turing architecture, providing 16GB of GPU memory.
+
+```python
+@app.function(gpu="T4")
+def f():
+    pass
+```
+
+### L4
+
+[NVIDIA L4 Tensor Core](https://www.nvidia.com/en-us/data-center/l4/) GPU - A mid-tier data center GPU based on the Ada Lovelace architecture, providing 24GB of GPU memory. Includes RTX (ray tracing) support.
+
+```python
+@app.function(gpu="L4")
+def f():
+    pass
+```
+
+### A10G
+
+[NVIDIA A10G Tensor Core](https://www.nvidia.com/en-us/data-center/products/a10-gpu/) GPU - A mid-tier data center GPU based on the Ampere architecture, providing 24GB of memory. Delivers up to 3.3x better ML training performance, 3x better ML inference performance, and 3x better graphics performance compared to T4 GPUs.
+
+```python
+@app.function(gpu="A10G")
+def f():
+    pass
+```
+
+### A100
+
+[NVIDIA A100 Tensor Core](https://www.nvidia.com/en-us/data-center/a100/) GPU - The flagship data center GPU of the Ampere architecture. Available in 40GB and 80GB GPU memory configurations.
+
+```python
+# 40GB variant (default)
+@app.function(gpu="A100")
+def f():
+    pass
+
+# 80GB variant
+@app.function(gpu="A100-80GB")
+def f():
+    pass
+```
+
+### H100
+
+[NVIDIA H100 Tensor Core](https://www.nvidia.com/en-us/data-center/h100/) GPU - The flagship data center GPU of the Hopper architecture. Features enhanced support for FP8 precision and a Transformer Engine that provides up to 4x faster training over the prior generation for GPT-3 (175B) models.
+
+```python
+@app.function(gpu="H100")
+def f():
+    pass
+```
+
+### L40S
+
+[NVIDIA L40S](https://www.nvidia.com/en-us/data-center/l40s/) GPU - A data center GPU based on the Ada Lovelace architecture with 48GB of on-chip GDDR6 RAM and enhanced support for FP8 precision.
+
+```python
+@app.function(gpu="L40S")
+def f():
+    pass
+```
+
+### Any
+
+Request any available GPU type. Modal will assign whichever GPU is available:
+
+```python
+@app.function(gpu="ANY")
+def f():
+    pass
+```
+
+## Multiple GPUs
+
+For workloads that require multiple GPUs (such as large models that don't fit on a single GPU), specify the count:
+
+```python
+# 4 T4 GPUs
+@app.function(gpu="T4:4")
+def train_model():
+    pass
+
+# 8 H100 GPUs
+@app.function(gpu="H100:8")
+def train_large_model():
+    pass
+```
+
+## Deprecated class-based syntax
+
+<Warning>
+  The class-based GPU configuration syntax is deprecated and will be removed in a future version. Use string syntax instead.
+</Warning>
+
+An older way to configure GPUs using classes is still supported but deprecated:
+
+```python
+import modal
+
+# Deprecated - use gpu="H100" instead
+@app.function(gpu=modal.gpu.H100())
+def f():
+    pass
+
+# Deprecated - use gpu="T4:4" instead
+@app.function(gpu=modal.gpu.T4(count=4))
+def f():
+    pass
+
+# Deprecated - use gpu="A100-80GB" instead
+@app.function(gpu=modal.gpu.A100(size="80GB"))
+def f():
+    pass
+```
+
+## GPU configuration reference
+
+### Supported values
+
+<ParamField path="gpu" type="str | None">
+  GPU configuration string. Can be:
+  - `None` - No GPU (default)
+  - `"GPU_TYPE"` - Single GPU of the specified type
+  - `"GPU_TYPE:COUNT"` - Multiple GPUs of the specified type
+  
+  Valid GPU types: `T4`, `L4`, `A10G`, `A100`, `A100-40GB`, `A100-80GB`, `H100`, `L40S`, `ANY`
+</ParamField>
+
+### Examples
+
+```python
+import modal
+
+app = modal.App()
+
+# No GPU
+@app.function()
+def cpu_only():
+    pass
+
+# Single H100
+@app.function(gpu="H100")
+def single_h100():
+    pass
+
+# 4 L40S GPUs
+@app.function(gpu="L40S:4")
+def multi_gpu():
+    pass
+
+# Any available GPU
+@app.function(gpu="ANY")
+def flexible():
+    pass
+```

@@ -1,0 +1,234 @@
+---
+title: Apps
+description: Learn how to create and deploy Modal Apps to organize your serverless functions and classes.
+---
+
+A Modal **App** is a group of functions and classes that are deployed together. The App serves as the fundamental unit of deployment and organization for your serverless code.
+
+## Creating an app
+
+Create an App by instantiating the `modal.App` class:
+
+```python
+import modal
+
+app = modal.App("my-app")
+```
+
+You can optionally configure defaults that apply to all functions and classes in the App:
+
+```python
+image = modal.Image.debian_slim().pip_install("numpy", "pandas")
+secret = modal.Secret.from_name("my-secret")
+volume = modal.Volume.from_name("my-data")
+
+app = modal.App(
+    "my-app",
+    image=image,
+    secrets=[secret],
+    volumes={"/mnt/data": volume}
+)
+```
+
+### App configuration options
+
+When creating an App, you can specify:
+
+- **`image`**: Default container image for all functions
+- **`secrets`**: Secrets to inject as environment variables
+- **`volumes`**: Volume mounts to attach to all functions
+- **`tags`**: Additional metadata for the App
+- **`include_source`**: Whether to automatically include function source files (default: `True`)
+
+## Registering functions
+
+The most common way to register functions with an App is using the `@app.function()` decorator:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function()
+def hello(name: str):
+    return f"Hello, {name}!"
+```
+
+When you decorate a function with `@app.function()`, both the function and any passed objects (like schedules and secrets) are registered with the App.
+
+<Note>
+Functions and classes are the main objects you register with an App. Learn more in the [Functions](/docs/concepts/functions) and [Classes](/docs/concepts/classes) documentation.
+</Note>
+
+## Running an app
+
+Use the `app.run()` context manager to run an ephemeral app and execute functions:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function()
+def my_function():
+    print("Running in Modal!")
+    return 42
+
+if __name__ == "__main__":
+    with app.run():
+        result = my_function.remote()
+        print(f"Result: {result}")
+```
+
+To see output logs, use `modal.enable_output()`:
+
+```python
+if __name__ == "__main__":
+    with modal.enable_output():
+        with app.run():
+            my_function.remote()
+```
+
+<Warning>
+Do not invoke `app.run()` in the global scope of a file where you define Modal Functions or Classes, as this would run the code when the function is imported in your containers. Always protect it with `if __name__ == "__main__":` or use it in a separate script.
+</Warning>
+
+## Deploying an app
+
+Deploy your App to make it persistently available:
+
+```python
+import modal
+
+app = modal.App("my-app")
+
+@app.function()
+@modal.web_endpoint()
+def web():
+    return {"message": "Hello, world!"}
+
+if __name__ == "__main__":
+    with modal.enable_output():
+        app.deploy()
+```
+
+Deployed Apps remain available for lookups and web-based invocations until they are stopped.
+
+### Deployment options
+
+The `deploy()` method accepts several parameters:
+
+- **`name`**: Override the App name for this deployment
+- **`environment_name`**: Deploy to a specific environment
+- **`tag`**: Add metadata specific to this deployment
+- **`client`**: Use an alternate client for communication
+
+```python
+app.deploy(
+    name="my-deployment",
+    environment_name="staging",
+    tag="v1.2.3"
+)
+```
+
+<Info>
+You can also deploy apps using the `modal deploy` CLI command. The `deploy()` method is a programmatic alternative.
+</Info>
+
+## Looking up apps
+
+Reference a deployed App by name:
+
+```python
+import modal
+
+app = modal.App.lookup("my-app", create_if_missing=True)
+```
+
+This is useful when creating Sandboxes or accessing deployed functions:
+
+```python
+app = modal.App.lookup("my-app", create_if_missing=True)
+sandbox = modal.Sandbox.create("echo", "hi", app=app)
+```
+
+## Local entrypoints
+
+Use `@app.local_entrypoint()` to define CLI entrypoints that run locally:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function()
+def process_data(x: int):
+    return x * 2
+
+@app.local_entrypoint()
+def main(value: int):
+    result = process_data.remote(value)
+    print(f"Result: {result}")
+```
+
+Run it with:
+
+```bash
+modal run app_module.py --value 42
+```
+
+### Multiple entrypoints
+
+If you have multiple entrypoints, qualify the function name:
+
+```bash
+modal run app_module.py::app.other_entrypoint
+```
+
+### Argument parsing
+
+Entrypoint functions with primitive type arguments are automatically parsed as CLI options:
+
+```python
+@app.local_entrypoint()
+def main(foo: int, bar: str, enabled: bool = False):
+    # Use --foo 1 --bar "hello" --enabled
+    pass
+```
+
+Supported types: `str`, `int`, `float`, `bool`, and `datetime.datetime`.
+
+## Best practices
+
+### Organize related functionality
+
+Group related functions and classes in a single App for cohesive deployment:
+
+```python
+app = modal.App("data-pipeline")
+
+@app.function()
+def extract():
+    pass
+
+@app.function()
+def transform():
+    pass
+
+@app.function()
+def load():
+    pass
+```
+
+### Use environment-specific apps
+
+Deploy to different environments for testing and production:
+
+```python
+app.deploy(environment_name="staging")
+app.deploy(environment_name="production")
+```
+
+### Keep apps focused
+
+Create separate Apps for distinct services or workflows rather than bundling everything into one large App. This makes deployments faster and more manageable.

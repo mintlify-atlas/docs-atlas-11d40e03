@@ -1,0 +1,358 @@
+---
+title: Basic usage
+description: Learn basic usage patterns and common workflows with the Modal TypeScript SDK
+---
+
+This guide covers common patterns and workflows for using the Modal TypeScript SDK.
+
+## Creating a client
+
+All interactions with Modal start with creating a `ModalClient` instance:
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+```
+
+The client provides access to all Modal services through service properties:
+
+- `modal.apps` - App management
+- `modal.sandboxes` - Sandbox creation and management
+- `modal.functions` - Function calling
+- `modal.cls` - Class calling
+- `modal.images` - Image building
+- `modal.volumes` - Volume management
+- `modal.queues` - Queue operations
+- `modal.secrets` - Secret management
+- `modal.proxies` - Proxy management
+
+## Working with sandboxes
+
+Sandboxes are isolated execution environments where you can run arbitrary code.
+
+### Create and run a sandbox
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("my-app", {
+  createIfMissing: true,
+});
+const image = modal.images.fromRegistry("alpine:3.21");
+
+const sb = await modal.sandboxes.create(app, image, {
+  command: ["cat"],
+});
+console.log("Sandbox:", sb.sandboxId);
+
+await sb.stdin.writeText("Hello from Modal!");
+await sb.stdin.close();
+console.log("Output:", await sb.stdout.readText());
+
+await sb.terminate();
+```
+
+### Execute commands in a sandbox
+
+```typescript
+const sb = await modal.sandboxes.create(app, image);
+
+const process = await sb.exec(["sh", "-c", "echo 'Hello from exec!'"]);
+console.log("Command output:", await process.stdout.readText());
+
+await sb.terminate();
+```
+
+### Use named sandboxes
+
+Create a sandbox with a name to reference it later:
+
+```typescript
+const sb = await modal.sandboxes.create(app, image, {
+  name: "my-persistent-sandbox",
+});
+
+// Later, retrieve the sandbox by name
+const sbFromName = await modal.sandboxes.fromName(
+  "my-app",
+  "my-persistent-sandbox"
+);
+```
+
+## Calling functions
+
+Call Modal Functions that are deployed with the Python SDK.
+
+### Basic function call
+
+```typescript
+const echo = await modal.functions.fromName(
+  "libmodal-test-support",
+  "echo_string",
+);
+
+// Call with positional arguments
+let result = await echo.remote(["Hello world!"]);
+console.log(result); // "Hello world!"
+
+// Call with keyword arguments
+result = await echo.remote([], { s: "Hello world!" });
+console.log(result); // "Hello world!"
+```
+
+### Spawn functions asynchronously
+
+Spawn a function without waiting for the result:
+
+```typescript
+const func = await modal.functions.fromName("my-app", "process_data");
+
+// Spawn returns a FunctionCall that you can poll later
+const call = await func.spawn([{ data: "value" }]);
+console.log("Function call ID:", call.functionCallId);
+
+// Later, get the result
+const result = await call.get();
+```
+
+## Working with classes
+
+Call methods on Modal class instances.
+
+### Basic class usage
+
+```typescript
+const cls = await modal.cls.fromName("libmodal-test-support", "EchoCls");
+const instance = await cls.instance();
+const method = instance.method("echo_string");
+
+// Call with positional arguments
+let result = await method.remote(["Hello world!"]);
+console.log(result);
+
+// Call with keyword arguments
+result = await method.remote([], { s: "Hello world!" });
+console.log(result);
+```
+
+### Override class options
+
+You can override concurrency, batching, and other options:
+
+```typescript
+const cls = await modal.cls.fromName("my-app", "MyClass");
+
+// Override concurrency settings
+const clsWithConcurrency = cls.withConcurrency({
+  maxConcurrency: 10,
+});
+
+// Override batching settings
+const clsWithBatching = cls.withBatching({
+  maxBatchSize: 100,
+  waitMs: 1000,
+});
+```
+
+## Building images
+
+Create custom images from registries or with Dockerfile commands.
+
+### From a registry
+
+<Tabs>
+  <Tab title="Docker Hub">
+    ```typescript
+    const image = modal.images.fromRegistry("python:3.13");
+    ```
+  </Tab>
+  
+  <Tab title="AWS ECR">
+    ```typescript
+    const secret = await modal.secrets.fromName("aws-ecr-credentials");
+    const image = modal.images.fromAwsEcr(
+      "123456789.dkr.ecr.us-east-1.amazonaws.com/my-image:latest",
+      secret
+    );
+    ```
+  </Tab>
+  
+  <Tab title="GCP Artifact Registry">
+    ```typescript
+    const secret = await modal.secrets.fromName("gcp-credentials");
+    const image = modal.images.fromGcpArtifactRegistry(
+      "us-docker.pkg.dev/my-project/my-repo/my-image:latest",
+      secret
+    );
+    ```
+  </Tab>
+</Tabs>
+
+### Add Dockerfile commands
+
+```typescript
+const image = modal.images
+  .fromRegistry("alpine:3.21")
+  .dockerfileCommands([
+    "RUN apk add --no-cache curl=$CURL_VERSION",
+  ], {
+    secrets: [
+      await modal.secrets.fromObject({
+        CURL_VERSION: "8.12.1-r1",
+      }),
+    ],
+  })
+  .dockerfileCommands(["ENV SERVER=ipconfig.me"]);
+
+const sb = await modal.sandboxes.create(app, image, {
+  command: ["sh", "-c", "curl -Ls $SERVER"],
+});
+```
+
+## Working with volumes
+
+Volumes provide persistent storage across sandbox runs.
+
+### Create and mount a volume
+
+```typescript
+const volume = await modal.volumes.fromName("my-volume", {
+  createIfMissing: true,
+});
+
+const sb = await modal.sandboxes.create(app, image, {
+  volumes: { "/mnt/data": volume },
+});
+
+// Volume is now mounted at /mnt/data in the sandbox
+```
+
+### Use ephemeral volumes
+
+Create temporary volumes that exist only for the duration of use:
+
+```typescript
+const volume = await modal.volumes.ephemeral();
+
+const sb = await modal.sandboxes.create(app, image, {
+  volumes: { "/tmp/data": volume },
+});
+```
+
+## Using secrets
+
+Secrets provide secure environment variables to sandboxes.
+
+### From Modal secrets
+
+```typescript
+const secret = await modal.secrets.fromName("my-api-keys");
+
+const sb = await modal.sandboxes.create(app, image, {
+  secrets: [secret],
+});
+```
+
+### From object
+
+Create secrets from key-value pairs:
+
+```typescript
+const secret = await modal.secrets.fromObject({
+  API_KEY: "your-api-key",
+  DATABASE_URL: "postgresql://...",
+});
+
+const sb = await modal.sandboxes.create(app, image, {
+  secrets: [secret],
+});
+```
+
+## Working with queues
+
+Queues allow communication between different parts of your application.
+
+### Create and use a queue
+
+```typescript
+const queue = await modal.queues.fromName("my-queue", {
+  createIfMissing: true,
+});
+
+// Put items in the queue
+await queue.put("message 1");
+await queue.put({ data: "value" });
+
+// Get items from the queue
+const item1 = await queue.get();
+const item2 = await queue.get();
+
+console.log(item1, item2);
+```
+
+### Iterate over queue items
+
+```typescript
+for await (const item of queue.iterate()) {
+  console.log("Processing:", item);
+  // Process item...
+}
+```
+
+## Error handling
+
+The SDK provides specific error types for different failure scenarios:
+
+```typescript
+import { 
+  ModalClient, 
+  RemoteError, 
+  FunctionTimeoutError,
+  NotFoundError,
+  SandboxTimeoutError,
+} from "modal";
+
+try {
+  const result = await func.remote(["data"]);
+} catch (error) {
+  if (error instanceof FunctionTimeoutError) {
+    console.error("Function timed out");
+  } else if (error instanceof RemoteError) {
+    console.error("Remote function failed:", error.message);
+  } else if (error instanceof NotFoundError) {
+    console.error("Resource not found");
+  } else {
+    throw error;
+  }
+}
+```
+
+## Resource cleanup
+
+Always clean up resources when you're done:
+
+```typescript
+const modal = new ModalClient();
+
+try {
+  const sb = await modal.sandboxes.create(app, image);
+  // Use sandbox...
+} finally {
+  await sb.terminate();
+  modal.close();
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Client configuration" icon="gear" href="/typescript/client">
+    Learn about advanced client configuration
+  </Card>
+  <Card title="API reference" icon="book" href="https://modal-labs.github.io/libmodal/">
+    Explore the full API documentation
+  </Card>
+</CardGroup>

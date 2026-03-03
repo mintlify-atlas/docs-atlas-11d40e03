@@ -1,0 +1,251 @@
+---
+title: Basic usage
+description: Learn basic usage patterns for the Modal Go SDK
+---
+
+This guide covers the fundamental patterns for using the Modal Go SDK, including creating sandboxes, calling functions, and working with Modal resources.
+
+## Creating a sandbox
+
+Sandboxes provide secure, isolated environments for running code:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log"
+
+	modal "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+	ctx := context.Background()
+	mc, err := modal.NewClient()
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+	}
+
+	app, err := mc.Apps.FromName(ctx, "libmodal-example", &modal.AppFromNameParams{CreateIfMissing: true})
+	if err != nil {
+		log.Fatalf("Failed to get or create App: %v", err)
+	}
+
+	image := mc.Images.FromRegistry("alpine:3.21", nil)
+
+	sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+		Command: []string{"cat"},
+	})
+	if err != nil {
+		log.Fatalf("Failed to create Sandbox: %v", err)
+	}
+	fmt.Printf("Created Sandbox with ID: %s\n", sb.SandboxID)
+	defer func() {
+		if _, err := sb.Terminate(context.Background(), nil); err != nil {
+			log.Fatalf("Failed to terminate Sandbox %s: %v", sb.SandboxID, err)
+		}
+	}()
+
+	_, err = sb.Stdin.Write([]byte("this is input that should be mirrored by cat"))
+	if err != nil {
+		log.Fatalf("Failed to write to Sandbox stdin: %v", err)
+	}
+	err = sb.Stdin.Close()
+	if err != nil {
+		log.Fatalf("Failed to close Sandbox stdin: %v", err)
+	}
+
+	output, err := io.ReadAll(sb.Stdout)
+	if err != nil {
+		log.Fatalf("Failed to read from Sandbox stdout: %v", err)
+	}
+
+	fmt.Printf("output: %s\n", string(output))
+}
+```
+
+## Calling a Modal Function
+
+Call deployed Python functions from your Go code:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	modal "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+	ctx := context.Background()
+	mc, err := modal.NewClient()
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+	}
+
+	echo, err := mc.Functions.FromName(ctx, "libmodal-test-support", "echo_string", nil)
+	if err != nil {
+		log.Fatalf("Failed to get Function: %v", err)
+	}
+
+	// Call with positional arguments
+	ret, err := echo.Remote(ctx, []any{"Hello world!"}, nil)
+	if err != nil {
+		log.Fatalf("Failed to call Function: %v", err)
+	}
+	fmt.Println("Response:", ret)
+
+	// Call with keyword arguments
+	ret, err = echo.Remote(ctx, nil, map[string]any{"s": "Hello world!"})
+	if err != nil {
+		log.Fatalf("Failed to call Function with kwargs: %v", err)
+	}
+	fmt.Println("Response:", ret)
+}
+```
+
+<Note>
+Functions must be deployed using the Modal Python SDK before calling them from Go.
+</Note>
+
+## Calling a Modal Class
+
+Work with deployed Modal classes and their methods:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	modal "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+	ctx := context.Background()
+	mc, err := modal.NewClient()
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+	}
+
+	cls, err := mc.Cls.FromName(ctx, "libmodal-test-support", "EchoCls", nil)
+	if err != nil {
+		log.Fatalf("Failed to get Cls: %v", err)
+	}
+
+	instance, err := cls.Instance(ctx, nil)
+	if err != nil {
+		log.Fatalf("Failed to create Cls instance: %v", err)
+	}
+
+	function, err := instance.Method("echo_string")
+	if err != nil {
+		log.Fatalf("Failed to access Cls method: %v", err)
+	}
+
+	// Call with positional arguments
+	result, err := function.Remote(ctx, []any{"Hello world!"}, nil)
+	if err != nil {
+		log.Fatalf("Failed to call Cls method: %v", err)
+	}
+	fmt.Println("Response:", result)
+
+	// Call with keyword arguments
+	result, err = function.Remote(ctx, nil, map[string]any{"s": "Hello world!"})
+	if err != nil {
+		log.Fatalf("Failed to call Cls method: %v", err)
+	}
+	fmt.Println("Response:", result)
+}
+```
+
+## Working with resources
+
+The Modal client provides services for different resource types:
+
+<CodeGroup>
+
+```go Apps
+// Get or create an app
+app, err := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+	CreateIfMissing: true,
+})
+```
+
+```go Images
+// Use a public Docker image
+image := mc.Images.FromRegistry("python:3.11", nil)
+
+// Use a private image from AWS ECR
+image := mc.Images.FromAwsEcr("account.dkr.ecr.region.amazonaws.com/repo:tag", secret)
+```
+
+```go Volumes
+// Get or create a volume
+volume, err := mc.Volumes.FromName(ctx, "my-volume", &modal.VolumeFromNameParams{
+	CreateIfMissing: true,
+})
+
+// Create an ephemeral volume
+ephemeralVolume, err := mc.Volumes.Ephemeral(ctx, nil)
+```
+
+```go Secrets
+// Reference an existing secret
+secret, err := mc.Secrets.FromName(ctx, "my-secret", nil)
+
+// Create a secret from a map
+secret, err := mc.Secrets.FromMap(ctx, map[string]string{
+	"API_KEY": "your-api-key",
+}, nil)
+```
+
+</CodeGroup>
+
+## Error handling
+
+Always check errors returned from SDK operations:
+
+```go
+app, err := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+	CreateIfMissing: true,
+})
+if err != nil {
+	log.Fatalf("Failed to get or create app: %v", err)
+}
+```
+
+## Context management
+
+Most SDK methods require a `context.Context` as the first parameter:
+
+```go
+ctx := context.Background()
+
+// With timeout
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+sb, err := mc.Sandboxes.Create(ctx, app, image, params)
+```
+
+<Note>
+Contexts in the Go SDK only affect the current operation and are not used for lifecycle management of created resources.
+</Note>
+
+## More examples
+
+Explore additional examples in the [GitHub repository](https://github.com/modal-labs/modal-client/tree/main/go/examples):
+
+- [Sandbox with GPU](https://github.com/modal-labs/modal-client/blob/main/go/examples/sandbox-gpu/main.go)
+- [Function spawning](https://github.com/modal-labs/modal-client/blob/main/go/examples/function-spawn/main.go)
+- [Building custom images](https://github.com/modal-labs/modal-client/blob/main/go/examples/image-building/main.go)
+- [Sandbox tunnels](https://github.com/modal-labs/modal-client/blob/main/go/examples/sandbox-tunnels/main.go)
+- [Telemetry integration](https://github.com/modal-labs/modal-client/blob/main/go/examples/telemetry/main.go)

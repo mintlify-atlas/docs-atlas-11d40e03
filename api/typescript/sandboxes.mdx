@@ -1,0 +1,586 @@
+---
+title: Sandboxes
+description: Create and manage secure, isolated containers that boot in seconds
+---
+
+Sandboxes are secure, isolated containers in Modal that boot in seconds. They provide a flexible execution environment for running arbitrary commands.
+
+## Access the Sandboxes API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const app = await modal.apps.fromName("my-app", { createIfMissing: true });
+const image = modal.images.fromRegistry("python:3.13");
+
+const sandbox = await modal.sandboxes.create(app, image);
+```
+
+## Methods
+
+### `modal.sandboxes.create(app, image, params?)`
+
+Create a new Sandbox in the specified App with the given Image.
+
+<ParamField path="app" type="App" required>
+  The App context for the Sandbox.
+</ParamField>
+
+<ParamField path="image" type="Image" required>
+  The container image to use.
+</ParamField>
+
+<ParamField path="params" type="SandboxCreateParams" optional>
+  Configuration options
+  
+  <Expandable title="properties">
+    <ParamField path="cpu" type="number" optional>
+      CPU reservation in cores (can be fractional).
+    </ParamField>
+    
+    <ParamField path="cpuLimit" type="number" optional>
+      CPU hard limit in cores.
+    </ParamField>
+    
+    <ParamField path="memoryMiB" type="number" optional>
+      Memory reservation in MiB.
+    </ParamField>
+    
+    <ParamField path="memoryLimitMiB" type="number" optional>
+      Memory hard limit in MiB.
+    </ParamField>
+    
+    <ParamField path="gpu" type="string" optional>
+      GPU configuration (e.g., `"A100"`, `"T4:2"`, `"A100-80GB:4"`).
+    </ParamField>
+    
+    <ParamField path="timeoutMs" type="number" optional default="300000">
+      Maximum lifetime in milliseconds (default: 5 minutes). Must be a multiple of 1000.
+    </ParamField>
+    
+    <ParamField path="idleTimeoutMs" type="number" optional>
+      Idle timeout in milliseconds. Must be a multiple of 1000.
+    </ParamField>
+    
+    <ParamField path="workdir" type="string" optional>
+      Working directory (must be an absolute path).
+    </ParamField>
+    
+    <ParamField path="command" type="string[]" optional>
+      Command to run. Defaults to sleeping indefinitely.
+    </ParamField>
+    
+    <ParamField path="env" type="Record<string, string>" optional>
+      Environment variables.
+    </ParamField>
+    
+    <ParamField path="secrets" type="Secret[]" optional>
+      Secrets to inject as environment variables.
+    </ParamField>
+    
+    <ParamField path="volumes" type="Record<string, Volume>" optional>
+      Volumes to mount at specified paths.
+    </ParamField>
+    
+    <ParamField path="cloudBucketMounts" type="Record<string, CloudBucketMount>" optional>
+      Cloud bucket mounts.
+    </ParamField>
+    
+    <ParamField path="pty" type="boolean" optional>
+      Enable a PTY for the Sandbox.
+    </ParamField>
+    
+    <ParamField path="encryptedPorts" type="number[]" optional>
+      Ports to tunnel with TLS encryption.
+    </ParamField>
+    
+    <ParamField path="h2Ports" type="number[]" optional>
+      Ports to tunnel with HTTP/2.
+    </ParamField>
+    
+    <ParamField path="unencryptedPorts" type="number[]" optional>
+      Ports to tunnel without encryption.
+    </ParamField>
+    
+    <ParamField path="blockNetwork" type="boolean" optional>
+      Block all network access.
+    </ParamField>
+    
+    <ParamField path="cidrAllowlist" type="string[]" optional>
+      List of CIDRs to allow. Cannot be used with `blockNetwork`.
+    </ParamField>
+    
+    <ParamField path="cloud" type="string" optional>
+      Cloud provider to run on.
+    </ParamField>
+    
+    <ParamField path="regions" type="string[]" optional>
+      Region(s) to run in.
+    </ParamField>
+    
+    <ParamField path="verbose" type="boolean" optional>
+      Enable verbose logging.
+    </ParamField>
+    
+    <ParamField path="proxy" type="Proxy" optional>
+      Proxy to use for this Sandbox.
+    </ParamField>
+    
+    <ParamField path="name" type="string" optional>
+      Optional name for the Sandbox (unique within an App).
+    </ParamField>
+    
+    <ParamField path="customDomain" type="string" optional>
+      Custom domain for connections (Enterprise only).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Sandbox>">
+  The created Sandbox object.
+</ResponseField>
+
+```typescript
+const sandbox = await modal.sandboxes.create(app, image, {
+  cpu: 2,
+  memoryMiB: 4096,
+  timeoutMs: 600000, // 10 minutes
+  env: { ENVIRONMENT: "production" },
+  command: ["python", "server.py"],
+});
+```
+
+### `modal.sandboxes.fromId(sandboxId)`
+
+Get a running Sandbox by its ID.
+
+<ParamField path="sandboxId" type="string" required>
+  The Sandbox ID.
+</ParamField>
+
+<ResponseField name="return" type="Promise<Sandbox>">
+  The Sandbox object.
+</ResponseField>
+
+```typescript
+const sandbox = await modal.sandboxes.fromId("sb-123456");
+```
+
+### `modal.sandboxes.fromName(appName, name, params?)`
+
+Get a running Sandbox by name from a deployed App.
+
+<ParamField path="appName" type="string" required>
+  Name of the deployed App.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Name of the Sandbox.
+</ParamField>
+
+<ParamField path="params" type="SandboxFromNameParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Sandbox>">
+  The Sandbox object.
+</ResponseField>
+
+```typescript
+const sandbox = await modal.sandboxes.fromName("my-app", "worker-1");
+```
+
+### `modal.sandboxes.list(params?)`
+
+List all Sandboxes for the current environment or App.
+
+<ParamField path="params" type="SandboxListParams" optional>
+  Filter parameters
+  
+  <Expandable title="properties">
+    <ParamField path="appId" type="string" optional>
+      Filter by App ID.
+    </ParamField>
+    
+    <ParamField path="tags" type="Record<string, string>" optional>
+      Only return Sandboxes with all specified tags.
+    </ParamField>
+    
+    <ParamField path="environment" type="string" optional>
+      Override environment.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="AsyncGenerator<Sandbox>">
+  An async iterator of Sandbox objects.
+</ResponseField>
+
+```typescript
+for await (const sandbox of modal.sandboxes.list()) {
+  console.log(sandbox.sandboxId);
+}
+
+// Filter by tags
+for await (const sandbox of modal.sandboxes.list({ 
+  tags: { env: "production" } 
+})) {
+  console.log(sandbox.sandboxId);
+}
+```
+
+## Sandbox object
+
+### Properties
+
+<ResponseField name="sandboxId" type="string">
+  Unique identifier for the Sandbox.
+</ResponseField>
+
+<ResponseField name="stdin" type="ModalWriteStream<string>">
+  Stream for writing to the Sandbox's standard input.
+</ResponseField>
+
+<ResponseField name="stdout" type="ModalReadStream<string>">
+  Stream for reading the Sandbox's standard output.
+</ResponseField>
+
+<ResponseField name="stderr" type="ModalReadStream<string>">
+  Stream for reading the Sandbox's standard error.
+</ResponseField>
+
+### Methods
+
+#### `exec(command, params?)`
+
+Execute a command in the Sandbox and return a process handle.
+
+<ParamField path="command" type="string[]" required>
+  Command and arguments to execute.
+</ParamField>
+
+<ParamField path="params" type="SandboxExecParams" optional>
+  Execution options
+  
+  <Expandable title="properties">
+    <ParamField path="mode" type="'text' | 'binary'" optional default="'text'">
+      Stream encoding mode.
+    </ParamField>
+    
+    <ParamField path="stdout" type="'pipe' | 'ignore'" optional default="'pipe'">
+      How to handle stdout.
+    </ParamField>
+    
+    <ParamField path="stderr" type="'pipe' | 'ignore'" optional default="'pipe'">
+      How to handle stderr.
+    </ParamField>
+    
+    <ParamField path="workdir" type="string" optional>
+      Working directory for the command.
+    </ParamField>
+    
+    <ParamField path="timeoutMs" type="number" optional>
+      Timeout in milliseconds. Must be a multiple of 1000.
+    </ParamField>
+    
+    <ParamField path="env" type="Record<string, string>" optional>
+      Additional environment variables.
+    </ParamField>
+    
+    <ParamField path="secrets" type="Secret[]" optional>
+      Secrets to inject.
+    </ParamField>
+    
+    <ParamField path="pty" type="boolean" optional>
+      Enable a PTY for the command.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<ContainerProcess>">
+  A process object with `stdin`, `stdout`, `stderr` streams and a `wait()` method.
+</ResponseField>
+
+```typescript
+// Execute a simple command
+const proc = await sandbox.exec(["python", "--version"]);
+const output = await proc.stdout.readText();
+console.log(output);
+const exitCode = await proc.wait();
+
+// Binary mode
+const proc = await sandbox.exec(["cat", "image.png"], { mode: "binary" });
+const imageData = await proc.stdout.readBytes();
+```
+
+#### `terminate(params?)`
+
+Terminate the Sandbox.
+
+<ParamField path="params" type="SandboxTerminateParams" optional>
+  Termination options
+  
+  <Expandable title="properties">
+    <ParamField path="wait" type="boolean" optional>
+      If `true`, wait for termination and return the exit code.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<void | number>">
+  Returns `void` by default, or the exit code if `wait` is `true`.
+</ResponseField>
+
+```typescript
+// Terminate without waiting
+await sandbox.terminate();
+
+// Terminate and get exit code
+const exitCode = await sandbox.terminate({ wait: true });
+console.log(`Exited with code: ${exitCode}`);
+```
+
+#### `wait()`
+
+Wait for the Sandbox to finish and return the exit code.
+
+<ResponseField name="return" type="Promise<number>">
+  The exit code.
+</ResponseField>
+
+```typescript
+const exitCode = await sandbox.wait();
+```
+
+#### `poll()`
+
+Check if the Sandbox has finished without blocking.
+
+<ResponseField name="return" type="Promise<number | null>">
+  The exit code if finished, or `null` if still running.
+</ResponseField>
+
+```typescript
+const exitCode = await sandbox.poll();
+if (exitCode !== null) {
+  console.log(`Finished with code: ${exitCode}`);
+} else {
+  console.log("Still running");
+}
+```
+
+#### `tunnels(timeoutMs?)`
+
+Get tunnel metadata for ports exposed by the Sandbox.
+
+<ParamField path="timeoutMs" type="number" optional default="50000">
+  Timeout in milliseconds.
+</ParamField>
+
+<ResponseField name="return" type="Promise<Record<number, Tunnel>>">
+  A mapping of container ports to Tunnel objects.
+</ResponseField>
+
+```typescript
+const sandbox = await modal.sandboxes.create(app, image, {
+  encryptedPorts: [8000],
+});
+
+const tunnels = await sandbox.tunnels();
+const tunnel = tunnels[8000];
+console.log(`Service available at: ${tunnel.url}`);
+```
+
+#### `open(path, mode?)`
+
+Open a file in the Sandbox filesystem.
+
+<ParamField path="path" type="string" required>
+  Path to the file.
+</ParamField>
+
+<ParamField path="mode" type="SandboxFileMode" optional default="'r'">
+  File mode: `"r"`, `"w"`, `"a"`, `"r+"`, `"w+"`, or `"a+"`.
+</ParamField>
+
+<ResponseField name="return" type="Promise<SandboxFile>">
+  A file handle with `read()`, `write()`, and `close()` methods.
+</ResponseField>
+
+```typescript
+const file = await sandbox.open("/data/output.txt", "w");
+await file.write("Hello, world!");
+await file.close();
+
+const file = await sandbox.open("/data/output.txt", "r");
+const content = await file.read();
+await file.close();
+```
+
+#### `snapshotFilesystem(timeoutMs?)`
+
+Snapshot the entire filesystem and return an Image.
+
+<ParamField path="timeoutMs" type="number" optional default="55000">
+  Timeout in milliseconds.
+</ParamField>
+
+<ResponseField name="return" type="Promise<Image>">
+  An Image containing the filesystem snapshot.
+</ResponseField>
+
+```typescript
+const snapshot = await sandbox.snapshotFilesystem();
+console.log(`Snapshot image ID: ${snapshot.imageId}`);
+
+// Use the snapshot to create a new sandbox
+const newSandbox = await modal.sandboxes.create(app, snapshot);
+```
+
+#### `mountImage(path, image?)`
+
+Mount an Image at a path in the Sandbox filesystem.
+
+<ParamField path="path" type="string" required>
+  Mount path.
+</ParamField>
+
+<ParamField path="image" type="Image" optional>
+  Image to mount. If undefined, mounts an empty directory.
+</ParamField>
+
+```typescript
+const dataImage = await modal.images.fromId("im-123456");
+await sandbox.mountImage("/mnt/data", dataImage);
+```
+
+#### `snapshotDirectory(path)`
+
+Snapshot a directory and return an Image.
+
+<ParamField path="path" type="string" required>
+  Directory path to snapshot.
+</ParamField>
+
+<ResponseField name="return" type="Promise<Image>">
+  An Image containing the directory contents.
+</ResponseField>
+
+```typescript
+const dirSnapshot = await sandbox.snapshotDirectory("/workspace/output");
+```
+
+#### `setTags(tags)`
+
+Set tags (key-value pairs) on the Sandbox.
+
+<ParamField path="tags" type="Record<string, string>" required>
+  Tags to set.
+</ParamField>
+
+```typescript
+await sandbox.setTags({ 
+  env: "production",
+  version: "1.0",
+});
+```
+
+#### `getTags()`
+
+Get tags currently attached to the Sandbox.
+
+<ResponseField name="return" type="Promise<Record<string, string>>">
+  The Sandbox's tags.
+</ResponseField>
+
+```typescript
+const tags = await sandbox.getTags();
+console.log(tags); // { env: "production", version: "1.0" }
+```
+
+#### `detach()`
+
+Disconnect from the Sandbox, cleaning up local resources. The Sandbox continues running.
+
+```typescript
+sandbox.detach();
+```
+
+## Example: Run a Python script
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("python-runner", {
+  createIfMissing: true,
+});
+
+const image = modal.images
+  .fromRegistry("python:3.13")
+  .dockerfileCommands(["RUN pip install requests numpy"]);
+
+const sandbox = await modal.sandboxes.create(app, image, {
+  memoryMiB: 2048,
+});
+
+// Write a script
+const script = await sandbox.open("/tmp/script.py", "w");
+await script.write(`
+import numpy as np
+print(f"NumPy version: {np.__version__}")
+print(f"Random array: {np.random.rand(5)}")
+`);
+await script.close();
+
+// Execute it
+const proc = await sandbox.exec(["python", "/tmp/script.py"]);
+const output = await proc.stdout.readText();
+console.log(output);
+
+await sandbox.terminate();
+```
+
+## Example: Web server with port tunneling
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("web-server", {
+  createIfMissing: true,
+});
+
+const image = modal.images
+  .fromRegistry("python:3.13")
+  .dockerfileCommands(["RUN pip install fastapi uvicorn"]);
+
+const sandbox = await modal.sandboxes.create(app, image, {
+  encryptedPorts: [8000],
+  command: [
+    "uvicorn",
+    "main:app",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8000",
+  ],
+});
+
+const tunnels = await sandbox.tunnels();
+const tunnel = tunnels[8000];
+console.log(`Server available at: ${tunnel.url}`);
+
+// Access the server...
+
+await sandbox.terminate();
+```

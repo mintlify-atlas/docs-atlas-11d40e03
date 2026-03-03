@@ -1,0 +1,196 @@
+---
+title: Installation
+description: Install and set up the Modal TypeScript SDK in your project
+---
+
+The Modal TypeScript SDK is available as an npm package and works with Node.js, Deno, and Bun.
+
+## Install the package
+
+Install the Modal SDK in any server-side Node.js, Deno, or Bun project:
+
+<CodeGroup>
+```bash npm
+npm install modal
+```
+
+```bash yarn
+yarn add modal
+```
+
+```bash pnpm
+pnpm add modal
+```
+</CodeGroup>
+
+View the package on npm: [https://www.npmjs.com/package/modal](https://www.npmjs.com/package/modal)
+
+## Requirements
+
+<Note>
+  The Modal TypeScript SDK requires **Node.js 22 or later**.
+</Note>
+
+The SDK bundles both ES Modules and CommonJS formats, so you can load the package with either `import` or `require()` in any project:
+
+```typescript ES Modules
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+```
+
+```javascript CommonJS
+const { ModalClient } = require("modal");
+
+const modal = new ModalClient();
+```
+
+## Authentication
+
+You need to authenticate with Modal before using the SDK. There are two methods:
+
+### Method 1: Modal CLI (recommended)
+
+The easiest way to authenticate is using the Modal CLI:
+
+<Steps>
+  <Step title="Install Modal Python SDK">
+    ```bash
+    pip install modal
+    ```
+  </Step>
+  
+  <Step title="Run the setup command">
+    ```bash
+    modal setup
+    ```
+    
+    This will:
+    - Open your browser to authenticate
+    - Create a `~/.modal.toml` configuration file with your credentials
+    - Set up the default profile
+  </Step>
+  
+  <Step title="Verify authentication">
+    Your TypeScript SDK will automatically use the credentials from `~/.modal.toml`:
+    
+    ```typescript
+    import { ModalClient } from "modal";
+    
+    const modal = new ModalClient();
+    // Automatically uses credentials from ~/.modal.toml
+    ```
+  </Step>
+</Steps>
+
+### Method 2: Environment variables
+
+For machine environments (CI/CD, production servers), use environment variables:
+
+<Steps>
+  <Step title="Get your Modal tokens">
+    1. Go to [https://modal.com/settings/tokens](https://modal.com/settings/tokens)
+    2. Create a new token
+    3. Copy your `token_id` and `token_secret`
+  </Step>
+  
+  <Step title="Set environment variables">
+    ```bash
+    export MODAL_TOKEN_ID=ak-YOUR_TOKEN_ID
+    export MODAL_TOKEN_SECRET=as-YOUR_TOKEN_SECRET
+    ```
+    
+    <Warning>
+      Keep your token secret secure! Never commit it to version control.
+    </Warning>
+  </Step>
+  
+  <Step title="Use in your code">
+    The SDK will automatically detect the environment variables:
+    
+    ```typescript
+    import { ModalClient } from "modal";
+    
+    const modal = new ModalClient();
+    // Automatically uses MODAL_TOKEN_ID and MODAL_TOKEN_SECRET
+    ```
+  </Step>
+</Steps>
+
+## Configuration
+
+The Modal SDK uses configuration from several sources, in order of priority:
+
+1. **Constructor parameters**: Passed directly to `new ModalClient()`
+2. **Environment variables**: `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, etc.
+3. **Configuration file**: `~/.modal.toml` (default) or custom path via `MODAL_CONFIG_PATH`
+
+### Configuration file location
+
+The default configuration file is `~/.modal.toml`. You can customize this:
+
+```bash
+export MODAL_CONFIG_PATH=/path/to/custom/config.toml
+```
+
+### Available environment variables
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `MODAL_TOKEN_ID` | Your Modal token ID | - |
+| `MODAL_TOKEN_SECRET` | Your Modal token secret | - |
+| `MODAL_ENVIRONMENT` | Environment name | - |
+| `MODAL_SERVER_URL` | Modal API server URL | `https://api.modal.com:443` |
+| `MODAL_CONFIG_PATH` | Path to config file | `~/.modal.toml` |
+| `MODAL_PROFILE` | Profile name to use | Active profile in config |
+| `MODAL_IMAGE_BUILDER_VERSION` | Image builder version | `2024.10` |
+| `MODAL_LOGLEVEL` | Logging level | - |
+
+## Verify installation
+
+Create a simple test script to verify your installation:
+
+```typescript test.ts
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("test-app", {
+  createIfMissing: true,
+});
+
+const image = modal.images.fromRegistry("alpine:3.21");
+
+const sb = await modal.sandboxes.create(app, image, {
+  command: ["echo", "Hello from Modal!"],
+});
+
+console.log("Output:", await sb.stdout.readText());
+await sb.terminate();
+
+console.log("✓ Modal SDK is working!");
+```
+
+Run the test:
+
+```bash
+node test.ts
+```
+
+If everything is set up correctly, you should see:
+
+```
+Output: Hello from Modal!
+✓ Modal SDK is working!
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Basic usage" icon="code" href="/typescript/basic-usage">
+    Learn basic patterns and workflows
+  </Card>
+  <Card title="Client configuration" icon="gear" href="/typescript/client">
+    Configure the ModalClient
+  </Card>
+</CardGroup>

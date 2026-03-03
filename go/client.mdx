@@ -1,0 +1,271 @@
+---
+title: Client initialization
+description: Initialize and configure the Modal Go client
+---
+
+The Modal client is the main entry point for interacting with Modal resources from Go. It provides services for managing Apps, Sandboxes, Functions, Images, and other Modal resources.
+
+## Creating a client
+
+The simplest way to create a client is using the default configuration:
+
+```go
+import modal "github.com/modal-labs/modal-client/go"
+
+mc, err := modal.NewClient()
+if err != nil {
+	log.Fatalf("Failed to create client: %v", err)
+}
+```
+
+This reads credentials from environment variables (`MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`) or the `~/.modal.toml` configuration file.
+
+## Client with custom options
+
+For more control, use `NewClientWithOptions` to customize the client:
+
+```go
+client, err := modal.NewClientWithOptions(&modal.ClientParams{
+	TokenID:     "ak-YOUR_TOKEN_ID",
+	TokenSecret: "as-YOUR_TOKEN_SECRET",
+	Environment: "main",
+})
+if err != nil {
+	log.Fatalf("Failed to create client: %v", err)
+}
+```
+
+## Client parameters
+
+The `ClientParams` struct supports several configuration options:
+
+```go
+type ClientParams struct {
+	// Authentication credentials
+	TokenID     string
+	TokenSecret string
+	
+	// Environment to connect to (defaults to "main")
+	Environment string
+	
+	// Custom configuration (advanced use)
+	Config      *config
+	
+	// Custom logger for debugging
+	Logger      *slog.Logger
+	
+	// Custom gRPC client for testing
+	ControlPlaneClient pb.ModalClientClient
+	ControlPlaneConn   *grpc.ClientConn
+	
+	// Custom gRPC interceptors for telemetry
+	GRPCUnaryInterceptors  []grpc.UnaryClientInterceptor
+	GRPCStreamInterceptors []grpc.StreamClientInterceptor
+}
+```
+
+## Client services
+
+The client exposes services for different Modal resource types:
+
+<CodeGroup>
+
+```go Apps
+// Get or create an app
+app, err := mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{
+	CreateIfMissing: true,
+})
+```
+
+```go Sandboxes
+// Create a sandbox
+sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+	Command: []string{"python", "script.py"},
+})
+
+// Get sandbox by ID
+sb, err := mc.Sandboxes.FromID(ctx, "sb-123")
+
+// List sandboxes
+sandboxes, err := mc.Sandboxes.List(ctx, nil)
+```
+
+```go Functions
+// Get a deployed function
+fn, err := mc.Functions.FromName(ctx, "my-app", "my-function", nil)
+
+// Call the function
+result, err := fn.Remote(ctx, []any{"arg1", "arg2"}, nil)
+```
+
+```go Images
+// Use a registry image
+image := mc.Images.FromRegistry("python:3.11", nil)
+
+// Use AWS ECR
+image := mc.Images.FromAwsEcr("account.dkr.ecr.region.amazonaws.com/repo:tag", secret)
+
+// Use GCP Artifact Registry
+image := mc.Images.FromGcpArtifactRegistry("region-docker.pkg.dev/project/repo/image:tag", secret)
+```
+
+```go Volumes
+// Get or create a volume
+volume, err := mc.Volumes.FromName(ctx, "my-volume", &modal.VolumeFromNameParams{
+	CreateIfMissing: true,
+})
+```
+
+```go Secrets
+// Get a secret by name
+secret, err := mc.Secrets.FromName(ctx, "my-secret", nil)
+
+// Create from map
+secret, err := mc.Secrets.FromMap(ctx, map[string]string{
+	"API_KEY": "value",
+}, nil)
+```
+
+```go Queues
+// Get or create a queue
+queue, err := mc.Queues.FromName(ctx, "my-queue", &modal.QueueFromNameParams{
+	CreateIfMissing: true,
+})
+
+// Create ephemeral queue
+queue, err := mc.Queues.Ephemeral(ctx, nil)
+```
+
+```go Classes
+// Get a deployed class
+cls, err := mc.Cls.FromName(ctx, "my-app", "MyClass", nil)
+
+// Create instance
+instance, err := cls.Instance(ctx, nil)
+```
+
+</CodeGroup>
+
+## Custom observability
+
+Add custom gRPC interceptors for telemetry, tracing, and observability:
+
+```go
+import (
+	"context"
+	"log"
+	"time"
+
+	modal "github.com/modal-labs/modal-client/go"
+	"google.golang.org/grpc"
+)
+
+// Custom unary interceptor for logging
+func loggingInterceptor() grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		start := time.Now()
+		err := invoker(ctx, method, req, reply, cc, opts...)
+		log.Printf("gRPC call: %s, duration: %v, error: %v", method, time.Since(start), err)
+		return err
+	}
+}
+
+func main() {
+	mc, err := modal.NewClientWithOptions(&modal.ClientParams{
+		GRPCUnaryInterceptors: []grpc.UnaryClientInterceptor{
+			loggingInterceptor(),
+		},
+	})
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+	}
+	// Use client...
+}
+```
+
+<Warning>
+Custom interceptors are appended after Modal's built-in interceptors. The Modal gRPC API is not considered a public API and can change without warning.
+</Warning>
+
+## Closing the client
+
+Always close the client when done to clean up gRPC connections:
+
+```go
+mc, err := modal.NewClient()
+if err != nil {
+	log.Fatalf("Failed to create client: %v", err)
+}
+defer mc.Close()
+
+// Use the client...
+```
+
+## Client version
+
+Get the SDK version:
+
+```go
+version := mc.Version()
+fmt.Printf("Modal Go SDK version: %s\n", version)
+```
+
+## Migration from v0.4 to v0.5
+
+The v0.5 release introduced breaking changes. Key differences:
+
+<Steps>
+
+### Client initialization changed
+
+**Before (v0.4):**
+```go
+modal.InitializeClient(modal.ClientOptions{...})
+```
+
+**After (v0.5):**
+```go
+modal.NewClient()
+// or
+modal.NewClientWithOptions(&modal.ClientParams{...})
+```
+
+### Resources accessed via client services
+
+**Before (v0.4):**
+```go
+modal.AppLookup(ctx, "my-app", &modal.LookupOptions{...})
+modal.SandboxFromId(ctx, "sb-123")
+```
+
+**After (v0.5):**
+```go
+mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{...})
+mc.Sandboxes.FromID(ctx, "sb-123")
+```
+
+### Parameter structs renamed
+
+All `*Options` types renamed to `*Params` and passed as pointers:
+
+- `ClientOptions` → `ClientParams`
+- `LookupOptions` → `AppFromNameParams`, `FunctionFromNameParams`, etc.
+- `SandboxOptions` → `SandboxCreateParams`
+- `ExecOptions` → `SandboxExecParams`
+
+### Field naming follows Go conventions
+
+- `TokenId` → `TokenID`
+- `AppId` → `AppID`
+- `ServerUrl` → `ServerURL`
+
+</Steps>
+
+See the [migration guide](https://github.com/modal-labs/modal-client/blob/main/MIGRATION-GUIDE.md) for complete details.

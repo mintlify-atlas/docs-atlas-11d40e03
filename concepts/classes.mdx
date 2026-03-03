@@ -1,0 +1,395 @@
+---
+title: Classes
+description: Learn how to use Modal Classes (Cls) for stateful serverless applications with lifecycle management.
+---
+
+Modal **Classes** (referred to as `Cls`) enable you to build stateful serverless applications with method pooling and lifecycle hooks. They're ideal for workloads like model inference, where you want to load a model once and reuse it across many requests.
+
+## Creating classes
+
+Create a class by decorating a Python class with `@app.cls()`:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.cls()
+class MyModel:
+    @modal.method()
+    def predict(self, input: str):
+        return f"Prediction for: {input}"
+```
+
+### Class configuration
+
+The `@app.cls()` decorator accepts the same configuration parameters as `@app.function()`:
+
+```python
+@app.cls(
+    image=modal.Image.debian_slim().pip_install("torch"),
+    gpu="A100",
+    secrets=[modal.Secret.from_name("model-api-key")],
+    timeout=600
+)
+class GPUModel:
+    @modal.method()
+    def inference(self, data):
+        pass
+```
+
+<Note>
+Configuration specified at the class level applies to all methods within the class.
+</Note>
+
+## Methods
+
+Decorate instance methods with `@modal.method()` to make them remotely callable:
+
+```python
+@app.cls()
+class Counter:
+    @modal.method()
+    def increment(self, value: int):
+        return value + 1
+    
+    @modal.method()
+    def decrement(self, value: int):
+        return value - 1
+```
+
+Call methods remotely:
+
+```python
+with app.run():
+    counter = Counter()
+    result = counter.increment.remote(5)
+    print(result)  # 6
+```
+
+## Lifecycle hooks
+
+Lifecycle methods let you manage state across the lifetime of a container.
+
+### Enter methods
+
+Use `@modal.enter()` to run setup code when a container starts:
+
+```python
+@app.cls(gpu="A100")
+class Model:
+    @modal.enter()
+    def load_model(self):
+        import torch
+        # Load the model once when container starts
+        self.model = torch.load("model.pth")
+        self.model.eval()
+    
+    @modal.method()
+    def predict(self, input):
+        # Reuse the loaded model
+        return self.model(input)
+```
+
+<Info>
+The `@modal.enter()` method runs once per container, not once per method call. This makes it perfect for expensive initialization like loading models or establishing database connections.
+</Info>
+
+### Exit methods
+
+Use `@modal.exit()` to run cleanup code when a container shuts down:
+
+```python
+@app.cls()
+class DatabaseWorker:
+    @modal.enter()
+    def connect(self):
+        self.db = connect_to_database()
+    
+    @modal.exit()
+    def disconnect(self):
+        self.db.close()
+    
+    @modal.method()
+    def query(self, sql: str):
+        return self.db.execute(sql)
+```
+
+### Async lifecycle methods
+
+Lifecycle methods can be async:
+
+```python
+@app.cls()
+class AsyncService:
+    @modal.enter()
+    async def setup(self):
+        self.client = await create_async_client()
+    
+    @modal.method()
+    async def call_api(self, endpoint: str):
+        return await self.client.get(endpoint)
+```
+
+## Parameterized classes
+
+Use `modal.parameter()` to create parameterized classes:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.cls()
+class ParameterizedModel:
+    model_name: str = modal.parameter()
+    batch_size: int = modal.parameter(default=32)
+    
+    @modal.enter()
+    def load_model(self):
+        print(f"Loading {self.model_name} with batch size {self.batch_size}")
+        self.model = load_model(self.model_name)
+    
+    @modal.method()
+    def predict(self, input):
+        return self.model.predict(input, batch_size=self.batch_size)
+```
+
+Instantiate with different parameters:
+
+```python
+with app.run():
+    gpt2 = ParameterizedModel(model_name="gpt2", batch_size=16)
+    gpt4 = ParameterizedModel(model_name="gpt4", batch_size=8)
+    
+    result1 = gpt2.predict.remote("Hello")
+    result2 = gpt4.predict.remote("World")
+```
+
+<CodeGroup>
+```python Parameter Syntax
+@app.cls()
+class Model:
+    # Required parameter
+    model_id: str = modal.parameter()
+    
+    # Optional parameter with default
+    temperature: float = modal.parameter(default=0.7)
+```
+
+```python Legacy Constructor Syntax (Deprecated)
+@app.cls()
+class Model:
+    def __init__(self, model_id: str, temperature: float = 0.7):
+        self.model_id = model_id
+        self.temperature = temperature
+```
+</CodeGroup>
+
+<Warning>
+Custom `__init__` constructors are deprecated. Use `modal.parameter()` annotations instead for class parameterization.
+</Warning>
+
+## State management
+
+State stored in instance variables persists across method calls within the same container:
+
+```python
+@app.cls()
+class StatefulCounter:
+    @modal.enter()
+    def initialize(self):
+        self.count = 0
+    
+    @modal.method()
+    def increment(self):
+        self.count += 1
+        return self.count
+```
+
+<Note>
+State is container-local. Different containers maintain separate state, and containers may be recycled over time.
+</Note>
+
+## Web endpoints on classes
+
+Expose class methods as web endpoints:
+
+```python
+@app.cls()
+class API:
+    @modal.method()
+    @modal.web_endpoint()
+    def health(self):
+        return {"status": "healthy"}
+    
+    @modal.method()
+    @modal.web_endpoint(method="POST")
+    def process(self, data: dict):
+        return {"result": data}
+```
+
+## Looking up classes
+
+Reference deployed classes by name:
+
+```python
+import modal
+
+Model = modal.Cls.from_name("my-app", "Model")
+model = Model()
+result = model.predict.remote("input")
+```
+
+## Runtime configuration
+
+Override class configuration at runtime:
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+
+# Use a different GPU
+ModelOnH100 = Model.with_options(gpu="H100")
+
+# Override multiple settings
+CustomModel = Model.with_options(
+    gpu="A100",
+    memory=16384,
+    timeout=1200
+)
+
+model = CustomModel()
+result = model.predict.remote(data)
+```
+
+### Concurrency configuration
+
+Enable input concurrency:
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+ConcurrentModel = Model.with_concurrency(max_inputs=100, target_inputs=80)
+
+model = ConcurrentModel()
+```
+
+### Batching configuration
+
+Enable dynamic batching:
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+BatchedModel = Model.with_batching(max_batch_size=32, wait_ms=100)
+
+model = BatchedModel()
+```
+
+## Autoscaling
+
+Dynamically adjust autoscaling for class instances:
+
+```python
+Model = modal.Cls.from_name("my-app", "Model")
+model = Model()
+
+# Update autoscaling settings
+model.update_autoscaler(
+    min_containers=2,
+    max_containers=10,
+    buffer_containers=1
+)
+```
+
+<Info>
+Autoscaler updates only affect the current instance. Redeployments reset to the static configuration.
+</Info>
+
+## Memory snapshots
+
+Enable faster cold starts with memory snapshots:
+
+```python
+@app.cls(enable_memory_snapshot=True)
+class FastStartModel:
+    @modal.enter(snap=True)
+    def load_model(self):
+        # This runs once and is checkpointed
+        self.model = load_large_model()
+    
+    @modal.method()
+    def predict(self, input):
+        return self.model(input)
+```
+
+The `snap=True` parameter creates a checkpoint after the enter method completes, enabling subsequent containers to start from that state.
+
+## Best practices
+
+### Use lifecycle hooks for expensive initialization
+
+Load models, establish connections, and perform other expensive setup in `@modal.enter()` methods:
+
+```python
+@app.cls(gpu="A100")
+class EfficientModel:
+    @modal.enter()
+    def load(self):
+        # Expensive: runs once per container
+        self.model = load_model()
+    
+    @modal.method()
+    def predict(self, input):
+        # Fast: reuses loaded model
+        return self.model(input)
+```
+
+### Organize related methods in a class
+
+Group related functionality:
+
+```python
+@app.cls()
+class ImageProcessor:
+    @modal.method()
+    def resize(self, image, width, height):
+        pass
+    
+    @modal.method()
+    def crop(self, image, x, y, w, h):
+        pass
+    
+    @modal.method()
+    def filter(self, image, filter_type):
+        pass
+```
+
+### Use parameters for configuration
+
+Make classes reusable with parameters:
+
+```python
+@app.cls()
+class ConfigurableModel:
+    model_version: str = modal.parameter()
+    precision: str = modal.parameter(default="fp16")
+    
+    @modal.enter()
+    def load_model(self):
+        self.model = load_model(self.model_version, self.precision)
+```
+
+### Clean up resources in exit methods
+
+Ensure proper cleanup:
+
+```python
+@app.cls()
+class ResourceManager:
+    @modal.enter()
+    def acquire_resources(self):
+        self.resource = acquire_expensive_resource()
+    
+    @modal.exit()
+    def release_resources(self):
+        self.resource.close()
+```

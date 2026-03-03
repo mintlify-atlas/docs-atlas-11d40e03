@@ -1,0 +1,210 @@
+---
+title: Parallel execution
+description: Scale your workloads with parallel map and batched execution
+---
+
+## Overview
+
+Modal provides powerful primitives for parallel execution, allowing you to process large datasets efficiently by distributing work across multiple containers.
+
+## Parallel map
+
+The `map()` method allows you to apply a function to multiple inputs in parallel. Modal automatically manages the distribution of work across containers.
+
+### Basic usage
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function()
+def square(x):
+    return x ** 2
+
+@app.local_entrypoint()
+def main():
+    # Process inputs in parallel
+    results = list(square.map([1, 2, 3, 4]))
+    print(results)  # [1, 4, 9, 16]
+```
+
+### Multiple arguments
+
+You can pass multiple iterators to `map()`, one for each argument:
+
+```python
+@app.function()
+def multiply(a, b):
+    return a * b
+
+@app.local_entrypoint()
+def main():
+    # Each iterator provides values for one argument
+    results = list(multiply.map([1, 2, 3], [10, 20, 30]))
+    print(results)  # [10, 40, 90]
+```
+
+### Ordering outputs
+
+By default, `map()` returns results in the same order as inputs. Set `order_outputs=False` to get results as they complete:
+
+```python
+@app.local_entrypoint()
+def main():
+    # Get results in completion order (potentially faster)
+    for result in multiply.map([1, 2, 3], [10, 20, 30], order_outputs=False):
+        print(result)
+```
+
+<Tip>
+Setting `order_outputs=False` can improve throughput when some inputs take longer to process than others.
+</Tip>
+
+### Exception handling
+
+Use `return_exceptions=True` to collect exceptions instead of raising them:
+
+```python
+@app.function()
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+@app.local_entrypoint()
+def main():
+    results = list(divide.map([10, 20, 30], [2, 0, 5], return_exceptions=True))
+    # Results include both values and exceptions
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            print(f"Input {i} failed: {result}")
+        else:
+            print(f"Input {i} result: {result}")
+```
+
+<Note>
+When using `return_exceptions=True`, exceptions are returned as `UserCodeException` objects that wrap the original exception.
+</Note>
+
+## Starmap
+
+The `starmap()` method unpacks each item from a sequence as arguments:
+
+```python
+@app.function()
+def add(a, b, c):
+    return a + b + c
+
+@app.local_entrypoint()
+def main():
+    # Each tuple is unpacked as arguments
+    inputs = [(1, 2, 3), (4, 5, 6), (7, 8, 9)]
+    results = list(add.starmap(inputs))
+    print(results)  # [6, 15, 24]
+```
+
+## For each
+
+When you only need to execute a function for side effects and don't care about the results:
+
+```python
+@app.function()
+def process_data(item):
+    # Do some work, no return value needed
+    print(f"Processing {item}")
+
+@app.local_entrypoint()
+def main():
+    # Waits for all executions to complete
+    process_data.for_each([1, 2, 3, 4, 5])
+```
+
+## Spawn map
+
+The `spawn_map()` method starts parallel execution but returns immediately without waiting for results:
+
+```python
+@app.function()
+def expensive_computation(x):
+    import time
+    time.sleep(10)
+    return x ** 2
+
+@app.local_entrypoint()
+def main():
+    # Start processing and return immediately
+    expensive_computation.spawn_map([1, 2, 3, 4])
+    print("Computation started in background")
+```
+
+<Warning>
+With `spawn_map()`, you cannot currently retrieve results programmatically. Use `map()` if you need to process outputs.
+</Warning>
+
+## Async usage
+
+All map operations support async/await syntax:
+
+```python
+@app.function()
+async def async_process(x):
+    await asyncio.sleep(0.1)
+    return x * 2
+
+@app.local_entrypoint()
+async def main():
+    # Use async iteration
+    results = []
+    async for result in async_process.map.aio([1, 2, 3, 4]):
+        results.append(result)
+        print(f"Got result: {result}")
+```
+
+## Performance tuning
+
+Modal's map operations are designed to handle large-scale workloads efficiently:
+
+- **Chunking**: Inputs are sent to the server in chunks (49 inputs per request by default)
+- **Backpressure**: The system automatically throttles input creation if the server is overwhelmed
+- **Retry logic**: Failed inputs are automatically retried with exponential backoff
+
+<Steps>
+
+### Monitor progress
+
+Modal provides debug logging for map operations:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+### Control concurrency
+
+Adjust container scaling to control parallelism:
+
+```python
+@app.function(concurrency_limit=100)
+def process(x):
+    return x ** 2
+```
+
+### Handle rate limits
+
+For external APIs with rate limits, consider adding delays or using fewer containers.
+
+</Steps>
+
+## Best practices
+
+1. **Use ordered outputs sparingly**: Only set `order_outputs=True` when you need deterministic ordering
+2. **Handle exceptions gracefully**: Use `return_exceptions=True` for robust error handling
+3. **Monitor resource usage**: Watch container counts and adjust `concurrency_limit` as needed
+4. **Batch related work**: Group related operations to minimize overhead
+
+## Related resources
+
+- [Function reference](/reference/function)
+- [Concurrency and parallelism](/guide/concurrency)
+- [Container lifecycle](/advanced/container-lifecycle)

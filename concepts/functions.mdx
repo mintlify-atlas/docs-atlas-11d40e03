@@ -1,0 +1,387 @@
+---
+title: Functions
+description: Learn how to create and execute serverless Functions on Modal.
+---
+
+Functions are the basic units of serverless execution on Modal. They let you run Python code in the cloud with automatic scaling, custom dependencies, and hardware acceleration.
+
+## Creating functions
+
+Create a Function by decorating a Python function with `@app.function()`:
+
+```python
+import modal
+
+app = modal.App()
+
+@app.function()
+def hello(name: str):
+    return f"Hello, {name}!"
+```
+
+### Function parameters
+
+The `@app.function()` decorator accepts many configuration parameters:
+
+```python
+@app.function(
+    image=modal.Image.debian_slim().pip_install("numpy"),
+    secrets=[modal.Secret.from_name("my-secret")],
+    gpu="A100",
+    cpu=2.0,
+    memory=4096,
+    timeout=600
+)
+def compute(data):
+    import numpy as np
+    return np.sum(data)
+```
+
+<CodeGroup>
+```python Container Configuration
+@app.function(
+    image=modal.Image.debian_slim().pip_install("requests"),
+    secrets=[modal.Secret.from_name("api-key")],
+    volumes={"/cache": modal.Volume.from_name("my-cache")}
+)
+def fetch_data():
+    pass
+```
+
+```python Resource Configuration
+@app.function(
+    gpu="A100",
+    cpu=4.0,
+    memory=16384,  # 16 GB in MiB
+    ephemeral_disk=10240  # 10 GB in MiB
+)
+def train_model():
+    pass
+```
+
+```python Scaling Configuration
+@app.function(
+    min_containers=2,
+    max_containers=10,
+    buffer_containers=1,
+    scaledown_window=300
+)
+def api_handler():
+    pass
+```
+</CodeGroup>
+
+## Executing functions
+
+### Remote execution
+
+Call `.remote()` to execute a function in the cloud:
+
+```python
+with app.run():
+    result = hello.remote("World")
+    print(result)  # "Hello, World!"
+```
+
+The `.remote()` call serializes the arguments, sends them to Modal's infrastructure, executes the function in a container, and returns the result.
+
+### Local execution
+
+Call `.local()` to execute a function locally for testing:
+
+```python
+result = hello.local("World")
+print(result)  # "Hello, World!"
+```
+
+<Note>
+Local execution runs the function in your current Python process without any containerization or cloud resources.
+</Note>
+
+### Map and spawn
+
+Process multiple inputs in parallel using `.map()`:
+
+```python
+names = ["Alice", "Bob", "Charlie"]
+with app.run():
+    results = list(hello.map(names))
+    print(results)  # ["Hello, Alice!", "Hello, Bob!", "Hello, Charlie!"]
+```
+
+For fire-and-forget execution, use `.spawn()`:
+
+```python
+with app.run():
+    call = hello.spawn("World")
+    # Do other work...
+    result = call.get()  # Wait for result when needed
+```
+
+## Async functions
+
+Modal supports both synchronous and asynchronous functions:
+
+```python
+@app.function()
+async def async_hello(name: str):
+    await asyncio.sleep(1)
+    return f"Hello, {name}!"
+```
+
+Call async functions from async code:
+
+```python
+async with app.run():
+    result = await async_hello.remote.aio("World")
+```
+
+## Generator functions
+
+Functions can yield results incrementally:
+
+```python
+@app.function()
+def count_to(n: int):
+    for i in range(n):
+        yield i
+```
+
+Iterate over results:
+
+```python
+with app.run():
+    for num in count_to.remote_gen(10):
+        print(num)
+```
+
+<Info>
+Generator functions are useful for streaming data, processing large datasets in chunks, or providing progress updates.
+</Info>
+
+## Retries
+
+Configure automatic retries for failed function calls:
+
+```python
+@app.function(retries=3)
+def flaky_api_call():
+    # This will retry up to 3 times on failure
+    pass
+```
+
+For more control, use the `Retries` class:
+
+```python
+from modal import Retries
+
+@app.function(
+    retries=Retries(
+        max_retries=5,
+        initial_delay=1.0,
+        backoff_coefficient=2.0
+    )
+)
+def resilient_function():
+    pass
+```
+
+<Warning>
+Retries are not supported for generator functions or web endpoints.
+</Warning>
+
+## Timeouts
+
+Set execution timeouts to prevent functions from running indefinitely:
+
+```python
+@app.function(timeout=300)  # 5 minutes
+def long_running_task():
+    pass
+```
+
+You can also set a separate startup timeout:
+
+```python
+@app.function(
+    timeout=600,        # Execution timeout
+    startup_timeout=120  # Startup timeout
+)
+def slow_startup_function():
+    pass
+```
+
+## Scheduling
+
+Run functions on a schedule:
+
+```python
+from modal import Period, Cron
+
+@app.function(schedule=Period(days=1))
+def daily_task():
+    print("Running daily task")
+
+@app.function(schedule=Cron("0 */6 * * *"))
+def every_six_hours():
+    print("Running every 6 hours")
+```
+
+<Note>
+Scheduled functions must accept no arguments.
+</Note>
+
+## Web endpoints
+
+Expose functions as HTTP endpoints:
+
+```python
+@app.function()
+@modal.web_endpoint()
+def api():
+    return {"message": "Hello, API!"}
+```
+
+Access the endpoint URL after deployment:
+
+```python
+with app.run():
+    print(api.web_url)
+```
+
+Learn more in the [Web Endpoints guide](https://modal.com/docs/guide/webhooks).
+
+## Resource configuration
+
+### CPU and memory
+
+Request specific CPU and memory resources:
+
+```python
+@app.function(
+    cpu=2.0,              # 2 CPU cores
+    memory=8192           # 8 GB in MiB
+)
+def cpu_intensive():
+    pass
+```
+
+Specify hard limits:
+
+```python
+@app.function(
+    cpu=(2.0, 4.0),       # Request 2, limit to 4
+    memory=(4096, 8192)   # Request 4 GB, limit to 8 GB
+)
+def bounded_resources():
+    pass
+```
+
+### GPUs
+
+Request GPU resources:
+
+```python
+@app.function(gpu="A100")
+def gpu_task():
+    pass
+```
+
+Specify multiple GPU options with fallback:
+
+```python
+@app.function(gpu=["H100", "A100", "T4"])
+def flexible_gpu_task():
+    pass
+```
+
+### Region selection
+
+Run functions in specific regions:
+
+```python
+@app.function(region="us-east-1")
+def east_coast_only():
+    pass
+
+@app.function(region=["us-east-1", "eu-west-1"])
+def multi_region():
+    pass
+```
+
+## Autoscaling
+
+Control how your functions scale:
+
+```python
+@app.function(
+    min_containers=2,      # Always keep 2 running
+    max_containers=10,     # Never exceed 10
+    buffer_containers=1,   # Keep 1 extra idle container
+    scaledown_window=300   # Wait 5 minutes before scaling down
+)
+def auto_scaled():
+    pass
+```
+
+## Input concurrency
+
+Allow containers to process multiple inputs simultaneously:
+
+```python
+from modal import concurrent
+
+@app.function()
+@concurrent(max_inputs=100)
+def concurrent_handler(request):
+    # Can process up to 100 requests per container
+    pass
+```
+
+## Best practices
+
+### Keep functions focused
+
+Create small, single-purpose functions rather than large monolithic ones:
+
+```python
+# Good: Focused functions
+@app.function()
+def extract_data():
+    pass
+
+@app.function()
+def transform_data():
+    pass
+
+# Avoid: Monolithic function doing everything
+@app.function()
+def do_everything():
+    pass
+```
+
+### Use appropriate timeouts
+
+Set realistic timeouts based on expected execution time:
+
+```python
+@app.function(timeout=30)   # Quick API calls
+def api_call():
+    pass
+
+@app.function(timeout=3600)  # Long-running batch jobs
+def batch_process():
+    pass
+```
+
+### Leverage generator functions for streaming
+
+Use generators for large datasets or streaming responses:
+
+```python
+@app.function()
+def process_large_dataset():
+    for chunk in dataset_chunks:
+        result = process(chunk)
+        yield result
+```

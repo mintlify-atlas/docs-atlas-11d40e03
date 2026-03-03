@@ -1,80 +1,306 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Get started with Modal Client SDKs in minutes
 ---
 
-## Get started in three steps
+This guide walks you through creating your first Modal application. You'll learn how to create a sandbox and call a deployed function.
 
-Get your documentation site running locally and make your first customization.
+<Note>
+  Before starting, make sure you have [installed the SDK](/installation) and [set up authentication](/authentication).
+</Note>
 
-### Step 1: Set up your local environment
+## Create a sandbox
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Sandboxes let you run arbitrary code in isolated, containerized environments. Here's a simple example that creates a sandbox running the `cat` command:
 
-### Step 2: Deploy your changes
+<Tabs>
+  <Tab title="Python">
+    ```python sandbox_example.py
+    import modal
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    # Initialize the Modal client
+    client = modal.Client()
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    # Get or create an app
+    app = client.apps.from_name("my-first-app", create_if_missing=True)
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    # Use a base image
+    image = client.images.from_registry("alpine:3.21")
 
-### Step 3: Go live
+    # Create a sandbox
+    sb = client.sandboxes.create(app, image, command=["cat"])
+    print(f"Sandbox created: {sb.sandbox_id}")
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    # Write to stdin and read from stdout
+    sb.stdin.write_text("Hello from Modal!")
+    sb.stdin.close()
+    output = sb.stdout.read_text()
+    print(f"Output: {output}")
+
+    # Clean up
+    sb.terminate()
+    ```
+
+    Run the script:
+
+    ```bash
+    python sandbox_example.py
+    ```
+  </Tab>
+
+  <Tab title="TypeScript">
+    ```typescript sandbox_example.ts
+    import { ModalClient } from "modal";
+
+    // Initialize the Modal client
+    const modal = new ModalClient();
+
+    // Get or create an app
+    const app = await modal.apps.fromName("my-first-app", {
+      createIfMissing: true,
+    });
+
+    // Use a base image
+    const image = modal.images.fromRegistry("alpine:3.21");
+
+    // Create a sandbox
+    const sb = await modal.sandboxes.create(app, image, { command: ["cat"] });
+    console.log(`Sandbox created: ${sb.sandboxId}`);
+
+    // Write to stdin and read from stdout
+    await sb.stdin.writeText("Hello from Modal!");
+    await sb.stdin.close();
+    const output = await sb.stdout.readText();
+    console.log(`Output: ${output}`);
+
+    // Clean up
+    await sb.terminate();
+    ```
+
+    Run the script:
+
+    ```bash
+    npx tsx sandbox_example.ts
+    ```
+  </Tab>
+
+  <Tab title="Go">
+    ```go sandbox_example.go
+    package main
+
+    import (
+        "context"
+        "fmt"
+        "io"
+        "log"
+
+        modal "github.com/modal-labs/modal-client/go"
+    )
+
+    func main() {
+        ctx := context.Background()
+
+        // Initialize the Modal client
+        mc, err := modal.NewClient()
+        if err != nil {
+            log.Fatalf("Failed to create client: %v", err)
+        }
+
+        // Get or create an app
+        app, err := mc.Apps.FromName(ctx, "my-first-app", &modal.AppFromNameParams{
+            CreateIfMissing: true,
+        })
+        if err != nil {
+            log.Fatalf("Failed to get app: %v", err)
+        }
+
+        // Use a base image
+        image := mc.Images.FromRegistry("alpine:3.21", nil)
+
+        // Create a sandbox
+        sb, err := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+            Command: []string{"cat"},
+        })
+        if err != nil {
+            log.Fatalf("Failed to create sandbox: %v", err)
+        }
+        fmt.Printf("Sandbox created: %s\n", sb.SandboxID)
+
+        // Ensure cleanup
+        defer sb.Terminate(context.Background(), nil)
+
+        // Write to stdin and read from stdout
+        _, err = sb.Stdin.Write([]byte("Hello from Modal!"))
+        if err != nil {
+            log.Fatalf("Failed to write to stdin: %v", err)
+        }
+        sb.Stdin.Close()
+
+        output, err := io.ReadAll(sb.Stdout)
+        if err != nil {
+            log.Fatalf("Failed to read from stdout: %v", err)
+        }
+        fmt.Printf("Output: %s\n", string(output))
+    }
+    ```
+
+    Run the script:
+
+    ```bash
+    go run sandbox_example.go
+    ```
+  </Tab>
+</Tabs>
+
+## Call a deployed function
+
+You can call Modal Functions that have been deployed using the Python SDK. Here's how to call a function from each SDK:
+
+<Tabs>
+  <Tab title="Python">
+    ```python call_function.py
+    import modal
+
+    # Initialize the Modal client
+    client = modal.Client()
+
+    # Get a reference to a deployed function
+    echo = client.functions.from_name(
+        "my-app",  # App name
+        "echo_string"  # Function name
+    )
+
+    # Call the function with positional arguments
+    result = echo.remote("Hello world!")
+    print(result)
+
+    # Call the function with keyword arguments
+    result = echo.remote(s="Hello world!")
+    print(result)
+    ```
+
+    <Note>
+      The Python SDK also lets you **define** functions using the `@app.function()` decorator. See the [Modal documentation](https://modal.com/docs/guide) for details.
+    </Note>
+  </Tab>
+
+  <Tab title="TypeScript">
+    ```typescript call_function.ts
+    import { ModalClient } from "modal";
+
+    // Initialize the Modal client
+    const modal = new ModalClient();
+
+    // Get a reference to a deployed function
+    const echo = await modal.functions.fromName(
+      "my-app",        // App name
+      "echo_string"    // Function name
+    );
+
+    // Call the function with positional arguments
+    let result = await echo.remote(["Hello world!"]);
+    console.log(result);
+
+    // Call the function with keyword arguments
+    result = await echo.remote([], { s: "Hello world!" });
+    console.log(result);
+    ```
+
+    <Warning>
+      The TypeScript SDK can only **call** existing functions. To define new functions, use the Python SDK.
+    </Warning>
+  </Tab>
+
+  <Tab title="Go">
+    ```go call_function.go
+    package main
+
+    import (
+        "context"
+        "fmt"
+        "log"
+
+        modal "github.com/modal-labs/modal-client/go"
+    )
+
+    func main() {
+        ctx := context.Background()
+
+        // Initialize the Modal client
+        mc, err := modal.NewClient()
+        if err != nil {
+            log.Fatalf("Failed to create client: %v", err)
+        }
+
+        // Get a reference to a deployed function
+        echo, err := mc.Functions.FromName(
+            ctx,
+            "my-app",       // App name
+            "echo_string",  // Function name
+            nil,
+        )
+        if err != nil {
+            log.Fatalf("Failed to get function: %v", err)
+        }
+
+        // Call the function with positional arguments
+        result, err := echo.Remote(ctx, []any{"Hello world!"}, nil)
+        if err != nil {
+            log.Fatalf("Failed to call function: %v", err)
+        }
+        fmt.Println("Response:", result)
+
+        // Call the function with keyword arguments
+        result, err = echo.Remote(ctx, nil, map[string]any{"s": "Hello world!"})
+        if err != nil {
+            log.Fatalf("Failed to call function: %v", err)
+        }
+        fmt.Println("Response:", result)
+    }
+    ```
+
+    <Warning>
+      The Go SDK can only **call** existing functions. To define new functions, use the Python SDK.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Key concepts
+
+### Apps
+
+Apps are containers for your Modal resources. Every sandbox, function, and resource belongs to an app. You can create apps with `from_name()` or reference existing ones.
+
+### Images
+
+Images define the runtime environment for your code. You can use pre-built images from Docker registries or build custom images with specific dependencies.
+
+### Sandboxes
+
+Sandboxes are isolated execution environments where you can run arbitrary commands, execute scripts, and interact with the filesystem. They're perfect for:
+
+- Running untrusted code safely
+- Building AI coding agents
+- Processing data in isolated environments
+- Testing code in different environments
+
+### Functions
+
+Functions are Python callables deployed on Modal that you can invoke from any SDK. They automatically handle serialization, execution, and result retrieval.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Explore examples" icon="code" href="https://modal.com/docs/examples">
+    Browse example applications and use cases
+  </Card>
+  <Card title="API reference" icon="book" href="https://modal.com/docs/reference">
+    Dive into the complete API documentation
+  </Card>
+  <Card title="User guide" icon="map" href="https://modal.com/docs/guide">
+    Learn best practices and advanced features
+  </Card>
+  <Card title="Join the community" icon="users" href="https://modal.com/slack">
+    Get help and share your projects on Slack
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,243 @@
+---
+title: Volumes
+description: Persistent storage that can be mounted in Modal Functions and Sandboxes
+---
+
+Volumes provide persistent storage that can be mounted in Modal Functions and Sandboxes. Data written to a Volume persists across executions.
+
+## Access the Volumes API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const volume = await modal.volumes.fromName("my-volume");
+```
+
+## Methods
+
+### `modal.volumes.fromName(name, params?)`
+
+Reference a Volume by name.
+
+<ParamField path="name" type="string" required>
+  Name of the Volume.
+</ParamField>
+
+<ParamField path="params" type="VolumeFromNameParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+    
+    <ParamField path="createIfMissing" type="boolean" optional>
+      If `true`, creates the Volume if it doesn't exist.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Volume>">
+  The Volume object.
+</ResponseField>
+
+```typescript
+// Reference existing volume
+const volume = await modal.volumes.fromName("my-data");
+
+// Create if missing
+const volume = await modal.volumes.fromName("my-data", {
+  createIfMissing: true,
+});
+```
+
+### `modal.volumes.ephemeral(params?)`
+
+Create a temporary, nameless Volume. It persists until `closeEphemeral()` is called or the process exits.
+
+<ParamField path="params" type="VolumeEphemeralParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Volume>">
+  The ephemeral Volume object.
+</ResponseField>
+
+```typescript
+const volume = await modal.volumes.ephemeral();
+
+// Use the volume...
+
+// Clean up when done
+volume.closeEphemeral();
+```
+
+### `modal.volumes.delete(name, params?)`
+
+Delete a named Volume.
+
+<ParamField path="name" type="string" required>
+  Name of the Volume to delete.
+</ParamField>
+
+<ParamField path="params" type="VolumeDeleteParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name.
+    </ParamField>
+    
+    <ParamField path="allowMissing" type="boolean" optional>
+      If `true`, don't throw an error if the Volume doesn't exist.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+await modal.volumes.delete("old-volume");
+
+// Don't error if it doesn't exist
+await modal.volumes.delete("maybe-volume", { allowMissing: true });
+```
+
+<Warning>
+  Deletion is irreversible and will affect any Apps currently using the Volume.
+</Warning>
+
+## Volume object
+
+### Properties
+
+<ResponseField name="volumeId" type="string">
+  Unique identifier for the Volume.
+</ResponseField>
+
+<ResponseField name="name" type="string | undefined">
+  Name of the Volume, if it was looked up by name.
+</ResponseField>
+
+<ResponseField name="isReadOnly" type="boolean">
+  Whether the Volume is configured to mount as read-only.
+</ResponseField>
+
+### Methods
+
+#### `readOnly()`
+
+Return a new Volume instance configured to mount as read-only.
+
+<ResponseField name="return" type="Volume">
+  A read-only Volume instance.
+</ResponseField>
+
+```typescript
+const volume = await modal.volumes.fromName("shared-data");
+const roVolume = volume.readOnly();
+
+// Mount as read-only
+const sandbox = await modal.sandboxes.create(app, image, {
+  volumes: { "/data": roVolume },
+});
+```
+
+#### `closeEphemeral()`
+
+Delete an ephemeral Volume. Only works with ephemeral Volumes.
+
+```typescript
+const volume = await modal.volumes.ephemeral();
+
+// Use the volume...
+
+volume.closeEphemeral(); // Clean up
+```
+
+<Note>
+  Throws `InvalidError` if called on a non-ephemeral Volume.
+</Note>
+
+## Example: Persist data across Sandbox runs
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("data-processor", {
+  createIfMissing: true,
+});
+
+const volume = await modal.volumes.fromName("processed-data", {
+  createIfMissing: true,
+});
+
+const image = modal.images.fromRegistry("python:3.13");
+
+// First run: Write data
+const writer = await modal.sandboxes.create(app, image, {
+  volumes: { "/data": volume },
+});
+
+const writeProc = await writer.exec([
+  "sh",
+  "-c",
+  "echo 'Hello from first run' > /data/output.txt",
+]);
+await writeProc.wait();
+await writer.terminate();
+
+// Second run: Read data
+const reader = await modal.sandboxes.create(app, image, {
+  volumes: { "/data": volume },
+});
+
+const readProc = await reader.exec(["cat", "/data/output.txt"]);
+const content = await readProc.stdout.readText();
+console.log(content); // "Hello from first run"
+
+await reader.terminate();
+```
+
+## Example: Share data between Functions and Sandboxes
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("ml-pipeline", {
+  createIfMissing: true,
+});
+
+// Create a volume for model artifacts
+const modelVolume = await modal.volumes.fromName("model-artifacts", {
+  createIfMissing: true,
+});
+
+// Mount as read-only for inference
+const roModelVolume = modelVolume.readOnly();
+
+const image = modal.images
+  .fromRegistry("python:3.13")
+  .dockerfileCommands(["RUN pip install torch transformers"]);
+
+// Sandbox for training (read-write)
+const trainer = await modal.sandboxes.create(app, image, {
+  volumes: { "/models": modelVolume },
+  gpu: "A100",
+});
+
+// Sandbox for inference (read-only)
+const inferencer = await modal.sandboxes.create(app, image, {
+  volumes: { "/models": roModelVolume },
+  gpu: "T4",
+});
+```

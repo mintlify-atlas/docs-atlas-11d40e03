@@ -1,0 +1,354 @@
+---
+title: Dict
+description: Distributed key-value store for Modal apps
+---
+
+`Dict` is a distributed dictionary for storage in Modal apps. Dict contents can be essentially any object that can be serialized by `cloudpickle`, including other Modal objects.
+
+## Key concepts
+
+**Serialization**: If writing and reading in different environments (e.g., writing locally and reading remotely), you must have the library defining the data type installed, with compatible versions, on both sides.
+
+**Key recommendations**: Cloudpickle serialization is not guaranteed to be deterministic, so it's generally recommended to use primitive types for keys.
+
+**Entry lifetime**: An individual Dict entry will expire after **7 days of inactivity** (no reads or writes). Dict entries are written to durable storage.
+
+<Note>
+Legacy Dicts (created before 2025-05-20) have entries that expire 30 days after being last added, and contents are stored in memory on Modal servers. These legacy Dicts will eventually be sunset.
+</Note>
+
+## Basic usage
+
+```python
+from modal import Dict
+
+my_dict = Dict.from_name("my-persisted-dict", create_if_missing=True)
+
+my_dict["some key"] = "some value"
+my_dict[123] = 456
+
+assert my_dict["some key"] == "some value"
+assert my_dict[123] == 456
+```
+
+## Creating dicts
+
+### Reference by name
+
+Create or reference a named dict that persists across runs:
+
+```python
+d = modal.Dict.from_name("my-dict", create_if_missing=True)
+d["key"] = "value"
+```
+
+### Ephemeral dicts
+
+Create a temporary dict that exists only within a context manager:
+
+```python
+from modal import Dict
+
+with Dict.ephemeral() as d:
+    d["foo"] = "bar"
+```
+
+```python
+async with Dict.ephemeral() as d:
+    await d.put.aio("foo", "bar")
+```
+
+### Create from ID
+
+Reference a dict by its object ID:
+
+```python
+@app.function()
+def my_worker(dict_id: str):
+    d = modal.Dict.from_id(dict_id)
+    d["key"] = "Hello from remote function!"
+
+with modal.Dict.ephemeral() as d:
+    # Pass the dict ID to a remote function
+    my_worker.remote(d.object_id)
+    print(d["key"])  # "Hello from remote function!"
+```
+
+## Dictionary operations
+
+### Get and set values
+
+```python
+d = Dict.from_name("my-dict", create_if_missing=True)
+
+# Set values
+d["name"] = "Alice"
+d[42] = {"nested": "data"}
+
+# Get values
+name = d["name"]
+value = d.get("missing-key", default="fallback")
+```
+
+### Check if key exists
+
+```python
+if "name" in d:
+    print("Key exists")
+
+# Or use the method form
+if d.contains("name"):
+    print("Key exists")
+```
+
+### Update multiple values
+
+```python
+d.update({"key1": "value1", "key2": "value2"})
+
+# Or use keyword arguments
+d.update(key3="value3", key4="value4")
+```
+
+### Put with conditional creation
+
+```python
+# Only set if key doesn't exist
+created = d.put("key", "value", skip_if_exists=True)
+if created:
+    print("Key was added")
+else:
+    print("Key already existed")
+```
+
+### Remove values
+
+```python
+# Pop with default
+value = d.pop("key", default=None)
+
+# Delete (raises KeyError if missing)
+del d["key"]
+
+# Clear all entries
+d.clear()
+```
+
+### Get dict length
+
+```python
+num_items = d.len()
+```
+
+<Note>
+The `len()` operation is expensive and will return at most 100,000.
+</Note>
+
+## Iterating over entries
+
+Iterate over keys, values, or items:
+
+```python
+# Iterate over keys
+for key in d.keys():
+    print(key)
+
+# Iterate over values
+for value in d.values():
+    print(value)
+
+# Iterate over items
+for key, value in d.items():
+    print(f"{key}: {value}")
+```
+
+<Note>
+Unlike Python dicts, these return simple iterators and results are unordered.
+</Note>
+
+## Async usage
+
+The `Dict` class offers methods with `.aio` suffix for async contexts. These are safe to call without blocking the event loop:
+
+```python
+import modal
+
+app = modal.App()
+d = modal.Dict.from_name("my-dict", create_if_missing=True)
+
+@app.function()
+async def async_worker():
+    # Use .aio methods in async contexts
+    await d.put.aio("key", "value")
+    value = await d.get.aio("key")
+    exists = await d.contains.aio("key")
+```
+
+<Warning>
+Using operators like `[]` or `in` in async contexts will block the event loop. Use the method forms with `.aio` instead.
+</Warning>
+
+## Managing dicts
+
+The `Dict.objects` namespace provides methods for managing named dicts.
+
+### Create a dict
+
+```python
+modal.Dict.objects.create("my-dict")
+```
+
+Create in a specific environment:
+
+```python
+modal.Dict.objects.create("my-dict", environment_name="dev")
+```
+
+Allow creation if dict already exists:
+
+```python
+modal.Dict.objects.create("my-dict", allow_existing=True)
+```
+
+### List dicts
+
+List all dicts in the active environment:
+
+```python
+dicts = modal.Dict.objects.list()
+print([d.name for d in dicts])
+```
+
+Limit results:
+
+```python
+dicts = modal.Dict.objects.list(max_objects=10, created_before="2025-01-01")
+```
+
+### Delete a dict
+
+```python
+await modal.Dict.objects.delete("my-dict")
+```
+
+<Warning>
+This deletes an **entire Dict**, not just a specific key. Deletion is irreversible and will affect any Apps currently using the Dict.
+</Warning>
+
+## API reference
+
+### Dict methods
+
+<ParamField path="get" type="method">
+  Get the value associated with a key. Returns `default` if key does not exist.
+  
+  **Parameters:**
+  - `key` (Any): The key to look up
+  - `default` (Any, optional): Value to return if key is not found
+  
+  **Returns:** Any
+</ParamField>
+
+<ParamField path="put" type="method">
+  Add a specific key-value pair to the Dict.
+  
+  **Parameters:**
+  - `key` (Any): The key
+  - `value` (Any): The value
+  - `skip_if_exists` (bool): If True, only set if key doesn't exist. Default: False
+  
+  **Returns:** bool - True if the pair was added, False if skipped because key existed
+</ParamField>
+
+<ParamField path="contains" type="method">
+  Check if a key is present in the Dict.
+  
+  **Parameters:**
+  - `key` (Any): The key to check
+  
+  **Returns:** bool
+</ParamField>
+
+<ParamField path="update" type="method">
+  Update the Dict with additional items.
+  
+  **Parameters:**
+  - `other` (Mapping, optional): Mapping to update from
+  - `**kwargs`: Additional key-value pairs
+</ParamField>
+
+<ParamField path="pop" type="method">
+  Remove a key from the Dict, returning the value if it exists.
+  
+  **Parameters:**
+  - `key` (Any): The key to remove
+  - `default` (Any, optional): Value to return if key not found. If not provided, raises KeyError.
+  
+  **Returns:** Any
+</ParamField>
+
+<ParamField path="clear" type="method">
+  Remove all items from the Dict.
+</ParamField>
+
+<ParamField path="len" type="method">
+  Return the number of items in the Dict. This is an expensive operation and will return at most 100,000.
+  
+  **Returns:** int
+</ParamField>
+
+<ParamField path="keys" type="method">
+  Return an iterator over the keys in this Dict. Results are unordered.
+  
+  **Returns:** AsyncIterator[Any]
+</ParamField>
+
+<ParamField path="values" type="method">
+  Return an iterator over the values in this Dict. Results are unordered.
+  
+  **Returns:** AsyncIterator[Any]
+</ParamField>
+
+<ParamField path="items" type="method">
+  Return an iterator over the (key, value) tuples in this Dict. Results are unordered.
+  
+  **Returns:** AsyncIterator[tuple[Any, Any]]
+</ParamField>
+
+<ParamField path="info" type="method">
+  Return information about the Dict object. Returns a `DictInfo` dataclass with `name`, `created_at`, and `created_by` fields.
+  
+  **Returns:** DictInfo
+</ParamField>
+
+## Error handling
+
+### Request size errors
+
+```python
+from modal.exception import RequestSizeError
+
+try:
+    d.put("key", very_large_object)
+except RequestSizeError:
+    print("Object too large for Dict")
+```
+
+### Deserialization errors
+
+```python
+from modal.exception import DeserializationError
+
+try:
+    value = d["key"]
+except DeserializationError as e:
+    print(f"Failed to deserialize: {e}")
+```
+
+## Best practices
+
+1. **Use primitive types for keys** (strings, integers) to ensure deterministic serialization
+2. **Set expiration expectations**: Remember that entries expire after 7 days of inactivity
+3. **Use `.aio` methods** in async contexts to avoid blocking the event loop
+4. **Handle missing keys**: Use `get()` with defaults or `contains()` to check existence
+5. **Batch updates**: Use `update()` for multiple key-value pairs instead of individual `put()` calls

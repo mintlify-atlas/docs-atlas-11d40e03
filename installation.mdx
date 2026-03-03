@@ -1,0 +1,189 @@
+---
+title: Installation
+description: Install the Modal Client SDK for Python, TypeScript, or Go
+---
+
+Choose your preferred language and follow the installation instructions below.
+
+<Tabs>
+  <Tab title="Python">
+    ## Python SDK
+
+    The Modal Python SDK requires **Python 3.10 – 3.14**.
+
+    ### Install with uv or pip
+
+    Install the `modal` package using your preferred package manager:
+
+    <CodeGroup>
+    ```bash uv
+    uv pip install modal
+    ```
+
+    ```bash pip
+    pip install modal
+    ```
+    </CodeGroup>
+
+    ### Verify installation
+
+    Verify that Modal is installed correctly:
+
+    ```bash
+    python -c "import modal; print(modal.__version__)"
+    ```
+
+    ### Package information
+
+    - **Package name**: `modal`
+    - **PyPI**: [https://pypi.org/project/modal/](https://pypi.org/project/modal/)
+    - **License**: Apache 2.0
+    - **Python versions**: 3.10, 3.11, 3.12, 3.13, 3.14
+
+    ### Key dependencies
+
+    The Python SDK includes the following key dependencies:
+    - `aiohttp` - Async HTTP client
+    - `grpclib` - gRPC support
+    - `rich` - Terminal formatting
+    - `typer` - CLI framework
+    - `click` - Command-line interface
+
+    <Note>
+      The Python SDK is the only SDK that supports **defining and deploying** Modal Functions. The TypeScript and Go SDKs are for calling existing Functions and managing resources.
+    </Note>
+  </Tab>
+
+  <Tab title="TypeScript">
+    ## TypeScript/JavaScript SDK
+
+    The Modal JavaScript SDK requires **Node.js 22 or later**. It includes built-in TypeScript type definitions.
+
+    ### Install with npm
+
+    Install the `modal` package in your server-side Node.js, Deno, or Bun project:
+
+    <CodeGroup>
+    ```bash npm
+    npm install modal
+    ```
+
+    ```bash yarn
+    yarn add modal
+    ```
+
+    ```bash pnpm
+    pnpm add modal
+    ```
+    </CodeGroup>
+
+    ### Module formats
+
+    The package bundles both ES Modules and CommonJS formats, so you can load it with either `import` or `require()`:
+
+    <CodeGroup>
+    ```typescript ESM
+    import { ModalClient } from "modal";
+    ```
+
+    ```javascript CommonJS
+    const { ModalClient } = require("modal");
+    ```
+    </CodeGroup>
+
+    ### Verify installation
+
+    Create a simple test file to verify the installation:
+
+    ```typescript test.ts
+    import { ModalClient } from "modal";
+    
+    const modal = new ModalClient();
+    console.log("Modal client initialized successfully!");
+    ```
+
+    ### Package information
+
+    - **Package name**: `modal`
+    - **npm**: [https://www.npmjs.com/package/modal](https://www.npmjs.com/package/modal)
+    - **License**: Apache 2.0
+    - **TypeScript**: Built-in type definitions included
+    - **Reference docs**: [https://modal-labs.github.io/libmodal/](https://modal-labs.github.io/libmodal/)
+
+    <Note>
+      The JavaScript/TypeScript SDK is approaching feature parity with the Python SDK, although defining Modal Functions remains exclusive to Python.
+    </Note>
+  </Tab>
+
+  <Tab title="Go">
+    ## Go SDK
+
+    The Modal Go SDK requires **Go 1.23 or later** (specified in go.mod as `go 1.24.0` for compatibility).
+
+    ### Install the package
+
+    Install the latest version using `go get`:
+
+    ```bash
+    go get -u github.com/modal-labs/modal-client/go
+    ```
+
+    ### Import in your application
+
+    Add the import to your Go files:
+
+    ```go
+    import modal "github.com/modal-labs/modal-client/go"
+    ```
+
+    ### Verify installation
+
+    Create a simple test to verify the installation:
+
+    ```go main.go
+    package main
+
+    import (
+        "fmt"
+        "log"
+        
+        modal "github.com/modal-labs/modal-client/go"
+    )
+
+    func main() {
+        mc, err := modal.NewClient()
+        if err != nil {
+            log.Fatalf("Failed to create client: %v", err)
+        }
+        fmt.Println("Modal client initialized successfully!")
+    }
+    ```
+
+    ### Package information
+
+    - **Module path**: `github.com/modal-labs/modal-client/go`
+    - **Go package**: [https://pkg.go.dev/github.com/modal-labs/modal-client/go](https://pkg.go.dev/github.com/modal-labs/modal-client/go)
+    - **License**: Apache 2.0
+    - **Minimum Go version**: 1.23
+
+    ### Key dependencies
+
+    The Go SDK includes:
+    - `google.golang.org/grpc` - gRPC support
+    - `google.golang.org/protobuf` - Protocol buffers
+    - `github.com/fxamacker/cbor/v2` - CBOR serialization
+    - `github.com/pelletier/go-toml/v2` - TOML configuration
+
+    <Note>
+      The Go SDK is approaching feature parity with the Python SDK, although defining Modal Functions remains exclusive to Python.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Next steps
+
+After installing the SDK, you need to authenticate with Modal:
+
+<Card title="Authentication setup" icon="key" href="/authentication">
+  Configure your Modal credentials to start using the SDK
+</Card>

@@ -1,0 +1,412 @@
+---
+title: modal.Image
+description: API reference for Modal Image class
+---
+
+Base class for container images to run functions in.
+
+Do not construct this class directly; instead use one of its static factory methods, such as `modal.Image.debian_slim`, `modal.Image.from_registry`, or `modal.Image.micromamba`.
+
+## Factory methods
+
+### Image.debian_slim
+
+```python
+modal.Image.debian_slim(
+    python_version: Optional[str] = None,
+)
+```
+
+Default image, based on the official Debian slim image.
+
+<ParamField path="python_version" type="str">
+  Python version to use (e.g., "3.11", "3.12"). Defaults to the version you're currently running locally.
+</ParamField>
+
+**Example:**
+
+```python
+image = modal.Image.debian_slim(python_version="3.11")
+```
+
+### Image.from_registry
+
+```python
+modal.Image.from_registry(
+    tag: str,
+    *,
+    secret: Optional[Secret] = None,
+    add_python: Optional[str] = None,
+    **kwargs,
+)
+```
+
+Create an image from a public or private registry.
+
+<ParamField path="tag" type="str" required>
+  Full image tag (e.g., "ubuntu:22.04" or "nvidia/cuda:12.2.0-devel-ubuntu22.04").
+</ParamField>
+
+<ParamField path="secret" type="Secret">
+  Optional secret for pulling from private registries.
+</ParamField>
+
+<ParamField path="add_python" type="str">
+  Optionally install a Python version onto the image (e.g., "3.11").
+</ParamField>
+
+**Example:**
+
+```python
+image = modal.Image.from_registry(
+    "nvidia/cuda:12.2.0-devel-ubuntu22.04",
+    add_python="3.11"
+)
+```
+
+### Image.micromamba
+
+```python
+modal.Image.micromamba(
+    python_version: Optional[str] = None,
+)
+```
+
+Create an image using micromamba for fast package installation.
+
+<ParamField path="python_version" type="str">
+  Python version to use. Defaults to your current version.
+</ParamField>
+
+**Example:**
+
+```python
+image = modal.Image.micromamba(python_version="3.11")
+```
+
+### Image.from_dockerfile
+
+```python
+modal.Image.from_dockerfile(
+    path: Union[str, Path],
+    *,
+    context_dir: Optional[Union[str, Path]] = None,
+    ignore: Union[Sequence[str], Callable[[Path], bool]] = [],
+)
+```
+
+Create an image from a Dockerfile.
+
+<ParamField path="path" type="Union[str, Path]" required>
+  Path to the Dockerfile.
+</ParamField>
+
+<ParamField path="context_dir" type="Union[str, Path]">
+  Directory to use as build context. Defaults to the directory containing the Dockerfile.
+</ParamField>
+
+<ParamField path="ignore" type="Union[Sequence[str], Callable]">
+  Files to ignore in the context (dockerignore syntax or callable).
+</ParamField>
+
+**Example:**
+
+```python
+image = modal.Image.from_dockerfile("./Dockerfile")
+```
+
+## Image modification methods
+
+### image.pip_install
+
+```python
+image.pip_install(
+    *packages: Union[str, list[str]],
+    find_links: Optional[str] = None,
+    index_url: Optional[str] = None,
+    extra_index_url: Optional[str] = None,
+    pre: bool = False,
+    extra_options: str = "",
+    force_build: bool = False,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    gpu: GPU_T = None,
+) -> Image
+```
+
+Install a list of Python packages using pip.
+
+<ParamField path="packages" type="str">
+  List of packages to install (e.g., "numpy", "pandas>=1.0").
+</ParamField>
+
+<ParamField path="find_links" type="str">
+  Passes -f (--find-links) to pip install.
+</ParamField>
+
+<ParamField path="index_url" type="str">
+  Passes -i (--index-url) to pip install.
+</ParamField>
+
+<ParamField path="extra_index_url" type="str">
+  Passes --extra-index-url to pip install.
+</ParamField>
+
+<ParamField path="pre" type="bool" default="False">
+  Allow pre-releases.
+</ParamField>
+
+<ParamField path="extra_options" type="str">
+  Additional options to pass to pip install (e.g., "--no-build-isolation").
+</ParamField>
+
+<ParamField path="force_build" type="bool" default="False">
+  Ignore cached builds.
+</ParamField>
+
+<ParamField path="env" type="dict[str, str]">
+  Environment variables to set during build.
+</ParamField>
+
+<ParamField path="secrets" type="Collection[Secret]">
+  Secrets to inject during build.
+</ParamField>
+
+<ParamField path="gpu" type="GPU_T">
+  GPU to use during build.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .pip_install("numpy", "pandas>=1.0")
+)
+```
+
+### image.pip_install_from_requirements
+
+```python
+image.pip_install_from_requirements(
+    requirements_txt: str,
+    *,
+    find_links: Optional[str] = None,
+    index_url: Optional[str] = None,
+    extra_index_url: Optional[str] = None,
+    pre: bool = False,
+    extra_options: str = "",
+    force_build: bool = False,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    gpu: GPU_T = None,
+) -> Image
+```
+
+Install Python packages from a local requirements.txt file.
+
+<ParamField path="requirements_txt" type="str" required>
+  Path to requirements.txt file.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .pip_install_from_requirements("requirements.txt")
+)
+```
+
+### image.run_commands
+
+```python
+image.run_commands(
+    *commands: Union[str, list[str]],
+    force_build: bool = False,
+    secrets: Collection[Secret] = [],
+    gpu: GPU_T = None,
+) -> Image
+```
+
+Run shell commands during image build.
+
+<ParamField path="commands" type="str">
+  Shell commands to run.
+</ParamField>
+
+<ParamField path="force_build" type="bool" default="False">
+  Ignore cached builds.
+</ParamField>
+
+<ParamField path="secrets" type="Collection[Secret]">
+  Secrets to inject during build.
+</ParamField>
+
+<ParamField path="gpu" type="GPU_T">
+  GPU to use during build.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .run_commands(
+        "apt-get update",
+        "apt-get install -y git"
+    )
+)
+```
+
+### image.add_local_file
+
+```python
+image.add_local_file(
+    local_path: Union[str, Path],
+    remote_path: str,
+    *,
+    copy: bool = False,
+) -> Image
+```
+
+Adds a local file to the image at `remote_path` within the container.
+
+<ParamField path="local_path" type="Union[str, Path]" required>
+  Local path to the file.
+</ParamField>
+
+<ParamField path="remote_path" type="str" required>
+  Absolute path in the container where file will be placed.
+</ParamField>
+
+<ParamField path="copy" type="bool" default="False">
+  If True, copy into image layer at build time. If False, add on container startup.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .add_local_file("./config.json", "/app/config.json")
+)
+```
+
+### image.add_local_dir
+
+```python
+image.add_local_dir(
+    local_path: Union[str, Path],
+    remote_path: str,
+    *,
+    copy: bool = False,
+    ignore: Union[Sequence[str], Callable[[Path], bool]] = [],
+) -> Image
+```
+
+Adds a local directory's contents to the image at `remote_path`.
+
+<ParamField path="local_path" type="Union[str, Path]" required>
+  Local path to the directory.
+</ParamField>
+
+<ParamField path="remote_path" type="str" required>
+  Absolute path in the container.
+</ParamField>
+
+<ParamField path="copy" type="bool" default="False">
+  If True, copy into image layer. If False, add on startup.
+</ParamField>
+
+<ParamField path="ignore" type="Union[Sequence[str], Callable]">
+  Files to exclude (dockerignore syntax or callable).
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .add_local_dir("./src", "/app/src", ignore=["*.pyc", "__pycache__"])
+)
+```
+
+### image.add_local_python_source
+
+```python
+image.add_local_python_source(
+    *modules: str,
+    copy: bool = False,
+    ignore: Union[Sequence[str], Callable[[Path], bool]] = NON_PYTHON_FILES,
+) -> Image
+```
+
+Adds locally available Python packages/modules to containers.
+
+<ParamField path="modules" type="str" required>
+  Names of Python packages or modules to include.
+</ParamField>
+
+<ParamField path="copy" type="bool" default="False">
+  If True, copy into image layer. If False, add on startup.
+</ParamField>
+
+<ParamField path="ignore" type="Union[Sequence[str], Callable]">
+  Files to exclude. Defaults to non-Python files.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .add_local_python_source("mypackage", "mymodule")
+)
+```
+
+### image.env
+
+```python
+image.env(
+    env_dict: dict[str, str],
+) -> Image
+```
+
+Set environment variables in the image.
+
+<ParamField path="env_dict" type="dict[str, str]" required>
+  Dictionary of environment variable name-value pairs.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .env({"MY_VAR": "value", "DEBUG": "true"})
+)
+```
+
+### image.workdir
+
+```python
+image.workdir(
+    path: str,
+) -> Image
+```
+
+Set the working directory for subsequent commands and when the container starts.
+
+<ParamField path="path" type="str" required>
+  Absolute path to use as working directory.
+</ParamField>
+
+**Example:**
+
+```python
+image = (
+    modal.Image.debian_slim()
+    .workdir("/app")
+)
+```

@@ -1,0 +1,285 @@
+---
+title: Cls
+description: Work with deployed Modal classes in Go
+---
+
+Modal classes allow you to maintain state and define multiple methods that share resources.
+
+## Referencing classes
+
+### FromName
+
+References a class from a deployed App by its name.
+
+```go
+cls, err := mc.Cls.FromName(ctx, "my-app", "MyClass", nil)
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="appName" type="string" required>
+  The name of the App containing the class
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the class
+</ParamField>
+
+<ParamField path="params" type="*ClsFromNameParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name. Defaults to client's environment.
+  </ParamField>
+  
+  <ParamField path="CreateIfMissing" type="bool">
+    Not used for classes
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Cls` - The class definition
+- `error` - NotFoundError if the class doesn't exist
+
+## Class methods
+
+### Instance
+
+Creates an instance of the class with the provided parameters.
+
+```go
+instance, err := cls.Instance(ctx, map[string]any{
+    "param1": "value1",
+    "param2": 42,
+})
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="parameters" type="map[string]any">
+  Parameters to pass to the class constructor. Use `nil` for classes without parameters.
+</ParamField>
+
+**Returns:**
+- `*ClsInstance` - An instance of the class with bound parameters
+- `error` - Error if instantiation fails or parameter validation fails
+
+### WithOptions
+
+Returns a new Cls with runtime options overridden.
+
+```go
+cpu := 2.0
+memory := 2048
+
+modifiedCls := cls.WithOptions(&modal.ClsWithOptionsParams{
+    CPU:       &cpu,
+    MemoryMiB: &memory,
+    GPU:       ptr("T4"),
+})
+```
+
+<ParamField path="params" type="*ClsWithOptionsParams">
+  Runtime configuration options
+  
+  <ParamField path="CPU" type="*float64">
+    CPU request in fractional cores
+  </ParamField>
+  
+  <ParamField path="CPULimit" type="*float64">
+    Hard CPU limit in fractional cores
+  </ParamField>
+  
+  <ParamField path="MemoryMiB" type="*int">
+    Memory request in MiB
+  </ParamField>
+  
+  <ParamField path="MemoryLimitMiB" type="*int">
+    Hard memory limit in MiB
+  </ParamField>
+  
+  <ParamField path="GPU" type="*string">
+    GPU configuration (e.g., "T4", "A100:2")
+  </ParamField>
+  
+  <ParamField path="Env" type="map[string]string">
+    Environment variables
+  </ParamField>
+  
+  <ParamField path="Secrets" type="[]*Secret">
+    Secrets to inject
+  </ParamField>
+  
+  <ParamField path="Volumes" type="map[string]*Volume">
+    Volume mount points
+  </ParamField>
+  
+  <ParamField path="Retries" type="*Retries">
+    Retry configuration
+  </ParamField>
+  
+  <ParamField path="MaxContainers" type="*int">
+    Maximum number of containers
+  </ParamField>
+  
+  <ParamField path="BufferContainers" type="*int">
+    Number of buffer containers
+  </ParamField>
+  
+  <ParamField path="ScaledownWindow" type="*time.Duration">
+    Time before scaling down idle containers
+  </ParamField>
+  
+  <ParamField path="Timeout" type="*time.Duration">
+    Execution timeout
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Cls` - A new Cls with options applied
+
+### WithConcurrency
+
+Returns a new Cls with concurrency settings configured.
+
+```go
+target := 5
+modifiedCls := cls.WithConcurrency(&modal.ClsWithConcurrencyParams{
+    MaxInputs:    10,
+    TargetInputs: &target,
+})
+```
+
+<ParamField path="params" type="*ClsWithConcurrencyParams">
+  Concurrency configuration
+  
+  <ParamField path="MaxInputs" type="int" required>
+    Maximum number of concurrent inputs per container
+  </ParamField>
+  
+  <ParamField path="TargetInputs" type="*int">
+    Target number of concurrent inputs for autoscaling
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Cls` - A new Cls with concurrency configured
+
+### WithBatching
+
+Returns a new Cls with dynamic batching configured.
+
+```go
+modifiedCls := cls.WithBatching(&modal.ClsWithBatchingParams{
+    MaxBatchSize: 100,
+    Wait:         500 * time.Millisecond,
+})
+```
+
+<ParamField path="params" type="*ClsWithBatchingParams">
+  Batching configuration
+  
+  <ParamField path="MaxBatchSize" type="int" required>
+    Maximum batch size
+  </ParamField>
+  
+  <ParamField path="Wait" type="time.Duration" required>
+    Maximum time to wait for batch to fill
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `*Cls` - A new Cls with batching configured
+
+## ClsInstance methods
+
+### Method
+
+Retrieves a method from the class instance.
+
+```go
+method, err := instance.Method("process")
+if err != nil {
+    // Handle error
+}
+
+// Call the method
+result, err := method.Remote(ctx, []any{"input"}, nil)
+```
+
+<ParamField path="name" type="string" required>
+  The name of the method
+</ParamField>
+
+**Returns:**
+- `*Function` - The method as a Function
+- `error` - NotFoundError if the method doesn't exist
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    // Reference a class
+    cls, err := mc.Cls.FromName(ctx, "my-app", "Model", nil)
+    if err != nil {
+        panic(err)
+    }
+
+    // Create an instance with parameters
+    instance, err := cls.Instance(ctx, map[string]any{
+        "model_name": "gpt-4",
+        "temperature": 0.7,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // Call a method
+    generateMethod, err := instance.Method("generate")
+    if err != nil {
+        panic(err)
+    }
+
+    result, err := generateMethod.Remote(ctx, []any{"Hello, world!"}, nil)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Generated: %v\n", result)
+
+    // Use WithOptions to override resources
+    cpu := 4.0
+    memory := 8192
+    highResourceCls := cls.WithOptions(&modal.ClsWithOptionsParams{
+        CPU:       &cpu,
+        MemoryMiB: &memory,
+    })
+
+    instance2, _ := highResourceCls.Instance(ctx, nil)
+    method2, _ := instance2.Method("process")
+    result2, _ := method2.Remote(ctx, []any{"data"}, nil)
+    fmt.Printf("Result: %v\n", result2)
+}
+```

@@ -1,0 +1,134 @@
+---
+title: modal.Schedule
+description: API reference for Modal scheduling (Cron and Period)
+---
+
+Schedules represent a time frame to repeatedly run a Modal function.
+
+## modal.Cron
+
+Cron jobs are a type of schedule, specified using the [Unix cron tab](https://crontab.guru/) syntax.
+
+### Constructor
+
+```python
+modal.Cron(
+    cron_string: str,
+    timezone: str = "UTC",
+)
+```
+
+Construct a schedule that runs according to a cron expression string.
+
+<ParamField path="cron_string" type="str" required>
+  Cron expression string (e.g., "0 9 * * *").
+</ParamField>
+
+<ParamField path="timezone" type="str" default="UTC">
+  Timezone for the schedule (e.g., "America/New_York").
+</ParamField>
+
+### Usage
+
+```python
+import modal
+app = modal.App()
+
+@app.function(schedule=modal.Cron("* * * * *"))
+def f():
+    print("This function will run every minute")
+```
+
+### Examples
+
+```python
+# Run at 4:05am UTC every night
+modal.Cron("5 4 * * *")
+
+# Run every Thursday at 9am UTC
+modal.Cron("0 9 * * 4")
+
+# Run daily at 6am New York time (accounts for daylight saving)
+modal.Cron("0 6 * * *", timezone="America/New_York")
+```
+
+## modal.Period
+
+Create a schedule that runs every given time interval.
+
+### Constructor
+
+```python
+modal.Period(
+    *,
+    years: int = 0,
+    months: int = 0,
+    weeks: int = 0,
+    days: int = 0,
+    hours: int = 0,
+    minutes: int = 0,
+    seconds: float = 0,
+)
+```
+
+Construct a period-based schedule.
+
+<ParamField path="years" type="int" default="0">
+  Number of years between runs.
+</ParamField>
+
+<ParamField path="months" type="int" default="0">
+  Number of months between runs.
+</ParamField>
+
+<ParamField path="weeks" type="int" default="0">
+  Number of weeks between runs.
+</ParamField>
+
+<ParamField path="days" type="int" default="0">
+  Number of days between runs.
+</ParamField>
+
+<ParamField path="hours" type="int" default="0">
+  Number of hours between runs.
+</ParamField>
+
+<ParamField path="minutes" type="int" default="0">
+  Number of minutes between runs.
+</ParamField>
+
+<ParamField path="seconds" type="float" default="0">
+  Number of seconds between runs. Only this parameter can be a float.
+</ParamField>
+
+### Usage
+
+```python
+import modal
+import math
+
+app = modal.App()
+
+@app.function(schedule=modal.Period(days=1))
+def f():
+    print("This function will run every day")
+
+# More examples
+modal.Period(hours=4)          # Runs every 4 hours
+modal.Period(minutes=15)       # Runs every 15 minutes
+modal.Period(seconds=math.pi)  # Runs every 3.14159... seconds
+```
+
+### Notes
+
+<Note>
+Only `seconds` can be a float. All other arguments are integers.
+</Note>
+
+<Note>
+`days=1` will trigger the function the same time every day. This does not have the same behavior as `seconds=86400` since days have different lengths due to daylight savings and leap seconds.
+
+Similarly, using `months=1` will trigger the function on the same day each month.
+</Note>
+
+This behaves similar to the [dateutil](https://dateutil.readthedocs.io/en/latest/relativedelta.html) package.

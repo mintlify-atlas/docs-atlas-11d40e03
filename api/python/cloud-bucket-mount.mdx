@@ -1,0 +1,143 @@
+---
+title: modal.CloudBucketMount
+description: API reference for Modal CloudBucketMount
+---
+
+Mounts a cloud bucket to your container. Currently supports AWS S3, Cloudflare R2, and Google Cloud Storage buckets.
+
+S3 buckets are mounted using [AWS S3 Mountpoint](https://github.com/awslabs/mountpoint-s3). S3 mounts are optimized for reading large files sequentially. It does not support every file operation; consult [the AWS S3 Mountpoint documentation](https://github.com/awslabs/mountpoint-s3/blob/main/doc/SEMANTICS.md) for more information.
+
+## Constructor
+
+```python
+modal.CloudBucketMount(
+    bucket_name: str,
+    bucket_endpoint_url: Optional[str] = None,
+    key_prefix: Optional[str] = None,
+    secret: Optional[Secret] = None,
+    oidc_auth_role_arn: Optional[str] = None,
+    read_only: bool = False,
+    requester_pays: bool = False,
+    force_path_style: bool = False,
+)
+```
+
+<ParamField path="bucket_name" type="str" required>
+  Name of the cloud bucket.
+</ParamField>
+
+<ParamField path="bucket_endpoint_url" type="str">
+  Endpoint URL for the bucket (required for R2 and GCS).
+</ParamField>
+
+<ParamField path="key_prefix" type="str">
+  Prefix to add to all object paths. Must end with '/'.
+</ParamField>
+
+<ParamField path="secret" type="Secret">
+  Secret containing credentials. Required for private buckets.
+</ParamField>
+
+<ParamField path="oidc_auth_role_arn" type="str">
+  Role ARN for OIDC authentication.
+</ParamField>
+
+<ParamField path="read_only" type="bool" default="False">
+  Mount as read-only.
+</ParamField>
+
+<ParamField path="requester_pays" type="bool" default="False">
+  Enable requester pays (requires credentials).
+</ParamField>
+
+<ParamField path="force_path_style" type="bool" default="False">
+  Force path-style URLs.
+</ParamField>
+
+## AWS S3 usage
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+secret = modal.Secret.from_name(
+    "aws-secret",
+    required_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+    # Note: providing AWS_REGION can help when automatic detection fails
+)
+
+@app.function(
+    volumes={
+        "/my-mount": modal.CloudBucketMount(
+            bucket_name="s3-bucket-name",
+            secret=secret,
+            read_only=True
+        )
+    }
+)
+def f():
+    subprocess.run(["ls", "/my-mount"], check=True)
+```
+
+## Cloudflare R2 usage
+
+Cloudflare R2 is [S3-compatible](https://developers.cloudflare.com/r2/api/s3/api/) but requires the `bucket_endpoint_url` parameter.
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+secret = modal.Secret.from_name(
+    "r2-secret",
+    required_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+)
+
+@app.function(
+    volumes={
+        "/my-mount": modal.CloudBucketMount(
+            bucket_name="my-r2-bucket",
+            bucket_endpoint_url="https://<ACCOUNT ID>.r2.cloudflarestorage.com",
+            secret=secret,
+            read_only=True
+        )
+    }
+)
+def f():
+    subprocess.run(["ls", "/my-mount"], check=True)
+```
+
+## Google Cloud Storage usage
+
+Google Cloud Storage (GCS) is [S3-compatible](https://cloud.google.com/storage/docs/interoperability). GCS Buckets require a secret with Google-specific key names populated with a [HMAC key](https://cloud.google.com/storage/docs/authentication/managing-hmackeys#create).
+
+```python
+import subprocess
+import modal
+
+app = modal.App()
+gcp_hmac_secret = modal.Secret.from_name(
+    "gcp-secret",
+    required_keys=["GOOGLE_ACCESS_KEY_ID", "GOOGLE_ACCESS_KEY_SECRET"]
+)
+
+@app.function(
+    volumes={
+        "/my-mount": modal.CloudBucketMount(
+            bucket_name="my-gcs-bucket",
+            bucket_endpoint_url="https://storage.googleapis.com",
+            secret=gcp_hmac_secret,
+        )
+    }
+)
+def f():
+    subprocess.run(["ls", "/my-mount"], check=True)
+```
+
+## Notes
+
+- For private buckets, the secret **must** contain `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+- For publicly accessible buckets, the secret is unnecessary and can be omitted
+- For GCS, use `GOOGLE_ACCESS_KEY_ID` and `GOOGLE_ACCESS_KEY_SECRET` instead
+- If `requester_pays` is True, credentials are required

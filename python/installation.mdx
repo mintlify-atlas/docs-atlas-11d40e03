@@ -1,0 +1,154 @@
+---
+title: Installation
+description: Install the Modal Python SDK using pip, uv, or poetry.
+---
+
+The Modal Python SDK can be installed using any standard Python package manager. This guide covers installation with pip, uv, and poetry.
+
+## Requirements
+
+Before installing Modal, ensure you have:
+
+- **Python 3.10 - 3.14** (Python 3.15+ is not yet supported)
+- A package manager (pip, uv, or poetry)
+
+## Installation methods
+
+<CodeGroup>
+
+```bash pip
+pip install modal
+```
+
+```bash uv
+uv pip install modal
+```
+
+```bash poetry
+poetry add modal
+```
+
+</CodeGroup>
+
+## Dependencies
+
+The Modal SDK includes the following core dependencies (from `pyproject.toml:16-32`):
+
+- **aiohttp** - Async HTTP client
+- **click** ~8.1 - Command-line interface framework
+- **typer** >=0.9 - CLI framework built on Click
+- **grpclib** - gRPC implementation
+- **protobuf** >=3.19, \<7.0 - Protocol buffers
+- **rich** >=12.0.0 - Terminal formatting
+- **synchronicity** ~0.11.1 - Async/sync API generation
+- **watchfiles** - File system monitoring
+- **typing_extensions** ~4.6 - Extended typing support
+
+These dependencies are automatically installed when you install Modal.
+
+## Verify installation
+
+After installation, verify that Modal is installed correctly:
+
+```bash
+python -m modal --version
+```
+
+You should see output like:
+
+```
+modal client version: 0.xx.xxx
+```
+
+## Authentication setup
+
+After installing the SDK, you need to authenticate with Modal:
+
+<Steps>
+
+<Step title="Run the setup command">
+  Run the following command to create or link your Modal account:
+  
+  ```bash
+  python -m modal setup
+  ```
+  
+  This will open your browser and guide you through authentication.
+</Step>
+
+<Step title="Verify authentication">
+  Check that your token was created successfully:
+  
+  ```bash
+  modal token list
+  ```
+  
+  You should see your authentication token listed.
+</Step>
+
+</Steps>
+
+<Note>
+  If the `modal` command is not found on your PATH, you can always use `python -m modal` as an alternative.
+</Note>
+
+## Development installation
+
+For development or contributing to Modal, you can install from source:
+
+```bash
+git clone https://github.com/modal-labs/modal-client.git
+cd modal-client
+pip install -e .
+```
+
+## Using profiles
+
+Modal supports multiple authentication profiles for working with different accounts or environments:
+
+```bash
+# Create a new profile
+modal token new --profile my-profile
+
+# Use a specific profile
+modal --profile my-profile app list
+```
+
+## Troubleshooting
+
+### Command not found
+
+If you see "command not found: modal", the modal executable may not be on your PATH. Use `python -m modal` instead:
+
+```bash
+python -m modal --help
+```
+
+### Python version errors
+
+If you see version-related errors, check your Python version:
+
+```bash
+python --version
+```
+
+Ensure you're using Python 3.10 through 3.14.
+
+### Permission errors
+
+On some systems, you may need to install with user permissions:
+
+```bash
+pip install --user modal
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Basic usage" icon="rocket" href="/python/basic-usage">
+    Start writing your first Modal function
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/python/cli-reference">
+    Learn about available CLI commands
+  </Card>
+</CardGroup>

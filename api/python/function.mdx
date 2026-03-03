@@ -1,0 +1,320 @@
+---
+title: modal.Function
+description: API reference for Modal Function class
+---
+
+Functions are the basic units of serverless execution on Modal.
+
+Generally, you will not construct a `Function` directly. Instead, use the `@app.function()` decorator to register your Python functions with your App.
+
+## Properties
+
+### function.web_url
+
+```python
+function.web_url -> Optional[str]
+```
+
+URL of the web endpoint for this function, if it's a web endpoint.
+
+## Methods
+
+### function.remote
+
+```python
+function.remote(*args, **kwargs) -> Any
+```
+
+Call the function remotely and return the result.
+
+This is a blocking call that waits for the function to complete and returns its result.
+
+**Example:**
+
+```python
+@app.function()
+def my_function(x: int) -> int:
+    return x + 1
+
+result = my_function.remote(42)  # Returns 43
+```
+
+### function.local
+
+```python
+function.local(*args, **kwargs) -> Any
+```
+
+Call the function locally, without going through Modal's infrastructure.
+
+This runs the function in your local Python interpreter using your local environment.
+
+**Example:**
+
+```python
+@app.function()
+def my_function(x: int) -> int:
+    return x + 1
+
+result = my_function.local(42)  # Runs locally
+```
+
+### function.spawn
+
+```python
+function.spawn(*args, **kwargs) -> FunctionCall
+```
+
+Spawn a function call and immediately return a `FunctionCall` handle.
+
+The function executes asynchronously, and you can retrieve its result later.
+
+**Example:**
+
+```python
+@app.function()
+def my_function(x: int) -> int:
+    return x + 1
+
+call = my_function.spawn(42)
+# ... do other work ...
+result = call.get()  # Get the result when ready
+```
+
+### function.map
+
+```python
+function.map(
+    *input_iterators,
+    kwargs: dict = {},
+    order_outputs: bool = True,
+    return_exceptions: bool = False,
+) -> Iterator[Any]
+```
+
+Map a function over one or more iterables, executing calls in parallel.
+
+<ParamField path="input_iterators" type="Iterable">
+  One or more iterables to map over. If multiple iterables are provided, they are zipped together.
+</ParamField>
+
+<ParamField path="kwargs" type="dict">
+  Keyword arguments to pass to each function call.
+</ParamField>
+
+<ParamField path="order_outputs" type="bool" default="True">
+  If True, results are returned in the same order as inputs. If False, results are returned as they complete.
+</ParamField>
+
+<ParamField path="return_exceptions" type="bool" default="False">
+  If True, exceptions are returned as values instead of being raised.
+</ParamField>
+
+<ResponseField name="results" type="Iterator[Any]">
+  Iterator over the function results.
+</ResponseField>
+
+**Example:**
+
+```python
+@app.function()
+def square(x: int) -> int:
+    return x * x
+
+results = list(square.map([1, 2, 3, 4, 5]))
+# Returns [1, 4, 9, 16, 25]
+```
+
+### function.starmap
+
+```python
+function.starmap(
+    input_iterator,
+    kwargs: dict = {},
+    order_outputs: bool = True,
+    return_exceptions: bool = False,
+) -> Iterator[Any]
+```
+
+Like `map`, but unpacks arguments from the input iterator.
+
+Each item in the iterator should be a tuple of arguments.
+
+**Example:**
+
+```python
+@app.function()
+def add(x: int, y: int) -> int:
+    return x + y
+
+results = list(add.starmap([(1, 2), (3, 4), (5, 6)]))
+# Returns [3, 7, 11]
+```
+
+### function.for_each
+
+```python
+function.for_each(
+    input_iterator,
+    kwargs: dict = {},
+    order_outputs: bool = False,
+    return_exceptions: bool = False,
+) -> Iterator[Any]
+```
+
+Like `map`, but optimized for side effects rather than return values.
+
+Results are returned as they complete (not in order by default).
+
+### function.update_autoscaler
+
+```python
+function.update_autoscaler(
+    *,
+    min_containers: Optional[int] = None,
+    max_containers: Optional[int] = None,
+    scaledown_window: Optional[int] = None,
+    buffer_containers: Optional[int] = None,
+) -> None
+```
+
+Override the current autoscaler behavior for this Function.
+
+Unspecified parameters will retain their current value. Subsequent deployments will reset the autoscaler back to its static configuration.
+
+<ParamField path="min_containers" type="int">
+  Minimum number of containers to keep running.
+</ParamField>
+
+<ParamField path="max_containers" type="int">
+  Maximum number of containers allowed.
+</ParamField>
+
+<ParamField path="scaledown_window" type="int">
+  Time in seconds before scaling down idle containers.
+</ParamField>
+
+<ParamField path="buffer_containers" type="int">
+  Number of additional idle containers to maintain under active load.
+</ParamField>
+
+**Example:**
+
+```python
+f = modal.Function.from_name("my-app", "my-function")
+
+# Always have at least 2 containers running
+f.update_autoscaler(min_containers=2, buffer_containers=1)
+
+# Limit to max 5 containers
+f.update_autoscaler(max_containers=5)
+```
+
+### Function.from_name
+
+```python
+modal.Function.from_name(
+    app_name: str,
+    tag: str,
+    *,
+    environment_name: Optional[str] = None,
+    client: Optional[Client] = None,
+) -> Function
+```
+
+Reference a Function from a deployed App by its name.
+
+This is a lazy method that defers hydrating the local object until it is actually used.
+
+<ParamField path="app_name" type="str" required>
+  Name of the deployed App.
+</ParamField>
+
+<ParamField path="tag" type="str" required>
+  Name of the Function within the App.
+</ParamField>
+
+<ParamField path="environment_name" type="str">
+  Environment to look up the Function in.
+</ParamField>
+
+<ParamField path="client" type="Client">
+  Optional Modal client to use.
+</ParamField>
+
+<ResponseField name="function" type="Function">
+  The referenced Function instance.
+</ResponseField>
+
+**Example:**
+
+```python
+f = modal.Function.from_name("my-app", "my-function")
+result = f.remote(42)
+```
+
+### function.with_options
+
+```python
+function.with_options(
+    *,
+    cpu: Optional[Union[float, tuple[float, float]]] = None,
+    memory: Optional[Union[int, tuple[int, int]]] = None,
+    gpu: GPU_T = None,
+    env: Optional[dict[str, Optional[str]]] = None,
+    secrets: Optional[Collection[Secret]] = None,
+    volumes: dict[Union[str, PurePosixPath], Union[Volume, CloudBucketMount]] = {},
+    retries: Optional[Union[int, Retries]] = None,
+    max_containers: Optional[int] = None,
+    buffer_containers: Optional[int] = None,
+    scaledown_window: Optional[int] = None,
+    timeout: Optional[int] = None,
+    region: Optional[Union[str, Sequence[str]]] = None,
+    cloud: Optional[str] = None,
+) -> Function
+```
+
+Override the static Function configuration at runtime.
+
+This returns a new Function instance that will autoscale independently of the original.
+
+**Example:**
+
+```python
+f = modal.Function.from_name("my-app", "my-function")
+f_gpu = f.with_options(gpu="A100")
+result = f_gpu.remote(data)  # Runs with A100 GPU
+```
+
+Options can be stacked:
+
+```python
+f.with_options(gpu="A100").with_options(scaledown_window=300)
+```
+
+## Async methods
+
+All blocking methods have async equivalents with the `.aio` suffix:
+
+- `function.remote.aio(*args, **kwargs)` - Async version of `remote()`
+- `function.spawn.aio(*args, **kwargs)` - Async version of `spawn()`
+- `function.map.aio(...)` - Async version of `map()`
+- `function.starmap.aio(...)` - Async version of `starmap()`
+- `function.for_each.aio(...)` - Async version of `for_each()`
+- `function.update_autoscaler.aio(...)` - Async version of `update_autoscaler()`
+
+**Example:**
+
+```python
+import asyncio
+
+@app.function()
+def my_function(x: int) -> int:
+    return x + 1
+
+async def main():
+    result = await my_function.remote.aio(42)
+    print(result)
+
+asyncio.run(main())
+```

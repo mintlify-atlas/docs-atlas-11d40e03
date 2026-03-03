@@ -1,0 +1,351 @@
+---
+title: Migration guide for v0.5.0
+description: Migrate your JavaScript and Go SDKs to the v0.5.0 beta release with breaking changes for improved ergonomics and consistency.
+---
+
+The Modal JS and Go SDKs went into beta with the version 0.5 release in October 2025. This release brings us closer to feature parity with the Python SDK and is a big step towards bringing JavaScript/TypeScript and Go to the same high level of developer experience and stability.
+
+<Warning>
+The beta release includes breaking changes to improve SDK ergonomics and align with general SDK best practices. While adapting requires some code changes, we believe these improvements make Modal easier to use going forward.
+</Warning>
+
+## Main changes
+
+The v0.5.0 release introduces several significant architectural improvements:
+
+- **Central Modal Client object**: The SDKs now expose a central Modal Client object as the main entry point for interacting with Modal resources.
+- **Consistent interface**: The interface for working with Modal object instances (Functions, Sandboxes, Images, etc.) is largely the same as before, with some naming changes.
+- **New serialization protocol**: Calling deployed Functions and classes now uses a new protocol for payload serialization which requires the deployed apps to use the Modal Python SDK 1.2 or newer.
+- **No global client**: Internally removed the global client (and config/profile data in global scope), moving all that to the Client type.
+- **Consistent parameter naming**: All `Options` structs/interfaces renamed to `Params` across both SDKs.
+
+## Calling deployed Modal Functions and classes
+
+<Warning>
+Starting with this version, invoking remote Functions and class methods through `.remote()` and similar uses a new serialization protocol.
+</Warning>
+
+This requires the referenced modal Apps to be deployed using:
+- **Modal Python SDK 1.2 or newer**
+- **2025.06 image builder version or newer** (see [image config](https://modal.com/settings/image-config)) OR have the `cbor2` Python package installed in their image
+
+## JavaScript/TypeScript migration
+
+### Client initialization
+
+Before (v0.4 and earlier):
+```typescript
+import { initializeClient } from "modal";
+initializeClient(...);
+```
+
+After (v0.5+):
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+// or customized:
+const modal = new ModalClient({ tokenId: "...", tokenSecret: "..." });
+```
+
+### Complete example
+
+Here's a complete example showing the new API:
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+
+const app = await modal.apps.fromName("libmodal-example", {
+  createIfMissing: true,
+});
+const image = modal.images.fromRegistry("alpine:3.21");
+const volume = await modal.volumes.fromName("libmodal-example-volume", {
+  createIfMissing: true,
+});
+
+const sb = await modal.sandboxes.create(app, image, {
+  volumes: { "/mnt/volume": volume },
+});
+const p = await sb.exec(["cat", "/mnt/volume/message.txt"]);
+console.log(`Message: ${await p.stdout.readText()}`);
+await sb.terminate();
+
+const echo = await modal.functions.fromName("libmodal-example", "echo");
+console.log(await echo.remote(["Hello world!"]));
+```
+
+### API changes by resource
+
+<Accordion title="App">
+- `App.lookup(...)` → `modal.apps.fromName(...)`
+</Accordion>
+
+<Accordion title="Cls">
+- `Cls.lookup(...)` → `modal.cls.fromName(...)`
+</Accordion>
+
+<Accordion title="Function">
+- `Function_.lookup(...)` → `modal.functions.fromName(...)`
+</Accordion>
+
+<Accordion title="FunctionCall">
+- `FunctionCall.fromId(...)` → `modal.functionCalls.fromId(...)`
+</Accordion>
+
+<Accordion title="Image">
+- `app.imageFromRegistry(...)` → `modal.images.fromRegistry(...)`
+- `app.imageFromAwsEcr(...)` → `modal.images.fromAwsEcr(...)`
+- `app.imageFromGcpArtifactRegistry(...)` → `modal.images.fromGcpArtifactRegistry(...)`
+- `Image.fromRegistry(...)` → `modal.images.fromRegistry(...)`
+- `Image.fromAwsEcr(...)` → `modal.images.fromAwsEcr(...)`
+- `Image.fromGcpArtifactRegistry(...)` → `modal.images.fromGcpArtifactRegistry(...)`
+- `Image.fromId(...)` → `modal.images.fromId(...)`
+- `Image.delete(...)` → `modal.images.delete(...)`
+</Accordion>
+
+<Accordion title="Proxy">
+- `Proxy.fromName(...)` → `modal.proxies.fromName(...)`
+</Accordion>
+
+<Accordion title="Queue">
+- `Queue.lookup(...)` → `modal.queues.fromName(...)`
+- `Queue.fromName(...)` → `modal.queues.fromName(...)`
+- `Queue.ephemeral(...)` → `modal.queues.ephemeral(...)`
+- `Queue.delete(...)` → `modal.queues.delete(...)`
+</Accordion>
+
+<Accordion title="Sandbox">
+- `app.createSandbox(image, { ... })` → `modal.sandboxes.create(app, image, { ... })`
+- `Sandbox.fromId(...)` → `modal.sandboxes.fromId(...)`
+- `Sandbox.fromName(...)` → `modal.sandboxes.fromName(...)`
+- `Sandbox.list(...)` → `modal.sandboxes.list(...)`
+</Accordion>
+
+<Accordion title="Secret">
+- `Secret.fromName(...)` → `modal.secrets.fromName(...)`
+- `Secret.fromObject(...)` → `modal.secrets.fromObject(...)`
+</Accordion>
+
+<Accordion title="Volume">
+- `Volume.fromName(...)` → `modal.volumes.fromName(...)`
+- `Volume.ephemeral(...)` → `modal.volumes.ephemeral(...)`
+</Accordion>
+
+### Parameter name changes
+
+#### Type renames (Options → Params)
+
+All parameter types have been renamed from `*Options` to `*Params` for consistency:
+
+- `ClsOptions` → `ClsWithOptionsParams`
+- `ClsConcurrencyOptions` → `ClsWithConcurrencyParams`
+- `ClsBatchingOptions` → `ClsWithBatchingParams`
+- `DeleteOptions` → specific `*DeleteParams` types: `QueueDeleteParams`
+- `EphemeralOptions` → specific `*EphemeralParams` types: `QueueEphemeralParams`, `VolumeEphemeralParams`
+- `ExecOptions` → `SandboxExecParams`
+- `LookupOptions` → specific `*FromNameParams` types: `AppFromNameParams`, `ClsFromNameParams`, `FunctionFromNameParams`, `QueueFromNameParams`
+- And many more...
+
+#### Unit suffixes
+
+<Note>
+Parameters now include explicit unit suffixes to make the API more self-documenting and prevent confusion about units.
+</Note>
+
+Time parameters (now in milliseconds with `Ms` suffix):
+- `timeout` → `timeoutMs`
+- `idleTimeout` → `idleTimeoutMs`
+- `scaledownWindow` → `scaledownWindowMs`
+- `itemPollTimeout` → `itemPollTimeoutMs`
+- `partitionTtl` → `partitionTtlMs`
+
+Memory parameters (now in MiB with `MiB` suffix):
+- `memory` → `memoryMiB`
+- `memoryLimit` → `memoryLimitMiB`
+
+## Go migration
+
+### Client initialization
+
+Before (v0.4 and earlier):
+```go
+import "github.com/modal-labs/libmodal/modal-go"
+modal.InitializeClient(modal.ClientOptions{...})
+```
+
+After (v0.5+):
+```go
+import "github.com/modal-labs/libmodal/modal-go"
+
+mc, err := modal.NewClient()
+// or customized:
+mc, err := modal.NewClientWithOptions(&modal.ClientParams{
+    TokenID:     "...",
+    TokenSecret: "...",
+})
+```
+
+### Complete example
+
+Here's a complete example showing the new API (with `err` handling omitted for brevity):
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/modal-labs/libmodal/modal-go"
+)
+
+func main() {
+	ctx := context.Background()
+
+	mc, _ := modal.NewClient()
+
+	app, _ := mc.Apps.FromName(ctx, "libmodal-example", &modal.AppFromNameParams{CreateIfMissing: true})
+	image := mc.Images.FromRegistry("alpine:3.21", nil)
+	volume, _ := mc.Volumes.FromName(ctx, "libmodal-example-volume", &modal.VolumeFromNameParams{CreateIfMissing: true})
+
+	sb, _ := mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{
+		Volumes: map[string]*modal.Volume{"/mnt/volume": volume},
+	})
+	defer sb.Terminate(context.Background())
+	p, _ := sb.Exec(ctx, []string{"cat", "/mnt/volume/message.txt"}, nil)
+	stdout, _ := io.ReadAll(p.Stdout)
+	fmt.Printf("Message: %s\n", stdout)
+
+	echo, _ := mc.Functions.FromName(ctx, "libmodal-example", "echo", nil)
+	result, _ := echo.Remote(ctx, []any{"Hello world!"}, nil)
+	fmt.Println(result)
+}
+```
+
+### Go-specific changes
+
+<Note>
+Go SDK v0.5 introduces several Go-specific improvements for better idiomaticity.
+</Note>
+
+#### Context passing
+- Many methods now require `ctx context.Context` as the first parameter
+- Contexts now only affect the current operation and are not used for lifecycle management of the created resources
+
+#### All Params are now pointers
+- All `Params` structs are now passed as pointers for consistency and to support optional parameters
+- Example: `&modal.SandboxCreateParams{...}` instead of `modal.SandboxCreateParams{...}`
+
+#### Field naming conventions
+
+Field names now follow Go casing conventions:
+- `TokenId` → `TokenID`
+- `AppId` → `AppID`
+- `SandboxId` → `SandboxID`
+- `ImageId` → `ImageID`
+- `FunctionId` → `FunctionID`
+- `Url` → `URL`
+- `BucketEndpointUrl` → `BucketEndpointURL`
+- And similar changes for all ID and URL fields
+
+### API changes by resource
+
+<Accordion title="App">
+- `modal.AppLookup(ctx, "my-app", &modal.LookupOptions{...})` → `mc.Apps.FromName(ctx, "my-app", &modal.AppFromNameParams{...})`
+</Accordion>
+
+<Accordion title="CloudBucketMount">
+- `modal.NewCloudBucketMount(..., &modal.CloudBucketMountOptions{...})` → `mc.CloudBucketMounts.New(..., &modal.CloudBucketMountParams{...})`
+</Accordion>
+
+<Accordion title="Cls">
+- `modal.ClsLookup(ctx, ..., &modal.LookupOptions{...})` → `mc.Cls.FromName(ctx, ..., &modal.ClsFromNameParams{...})`
+
+Cls methods:
+- `cls.Instance(...)` → `cls.Instance(ctx, ...)`
+- `cls.WithOptions(modal.ClsOptions{...})` → `cls.WithOptions(&modal.ClsWithOptionsParams{...})`
+- `cls.WithConcurrency(modal.ClsConcurrencyOptions{...})` → `cls.WithConcurrency(&modal.ClsWithConcurrencyParams{...})`
+- `cls.WithBatching(modal.ClsBatchingOptions{...})` → `cls.WithBatching(&modal.ClsWithBatchingParams{...})`
+</Accordion>
+
+<Accordion title="Function">
+- `modal.FunctionLookup(ctx, ..., &modal.LookupOptions{...})` → `mc.Functions.FromName(ctx, ..., &modal.FunctionFromNameParams{...})`
+
+Function methods:
+- `function.Remote(...)` → `function.Remote(ctx, ...)`
+- `function.Spawn(...)` → `function.Spawn(ctx, ...)`
+- `function.GetCurrentStats()` → `function.GetCurrentStats(ctx)`
+- `function.UpdateAutoscaler(modal.UpdateAutoscalerOptions{...})` → `function.UpdateAutoscaler(ctx, &modal.FunctionUpdateAutoscalerParams{...})`
+</Accordion>
+
+<Accordion title="FunctionCall">
+- `modal.FunctionCallFromId(ctx, "call-id")` → `mc.FunctionCalls.FromID(ctx, "call-id")`
+
+FunctionCall methods:
+- `functionCall.Get(&modal.FunctionCallGetOptions{...})` → `functionCall.Get(ctx, &modal.FunctionCallGetParams{...})`
+- `functionCall.Cancel(&modal.FunctionCallCancelOptions{...})` → `functionCall.Cancel(ctx, &modal.FunctionCallCancelParams{...})`
+</Accordion>
+
+<Accordion title="Image">
+- `modal.NewImageFromRegistry(..., &modal.ImageFromRegistryOptions{...})` → `mc.Images.FromRegistry(ctx, ..., &modal.ImageFromRegistryParams{...})`
+- `modal.NewImageFromAwsEcr(..., secret)` → `mc.Images.FromAwsEcr(ctx, ..., secret)`
+- `modal.NewImageFromGcpArtifactRegistry(..., secret)` → `mc.Images.FromGcpArtifactRegistry(ctx, ..., secret)`
+- `modal.NewImageFromId(ctx, ...)` → `mc.Images.FromID(ctx, ...)`
+- `modal.ImageDelete(ctx, ..., &modal.ImageDeleteOptions{...})` → `mc.Images.Delete(ctx, ..., &modal.ImageDeleteParams{...})`
+
+Image methods:
+- `image.DockerfileCommands(..., &modal.ImageDockerfileCommandsOptions{...})` → `image.DockerfileCommands(..., &modal.ImageDockerfileCommandsParams{...})`
+- `image.Build(app)` → `image.Build(ctx, app)`
+</Accordion>
+
+<Accordion title="Queue">
+- `modal.QueueLookup(ctx, ..., &modal.LookupOptions{...})` → `mc.Queues.FromName(ctx, ..., &modal.QueueFromNameParams{...})`
+- `modal.QueueEphemeral(ctx, &modal.EphemeralOptions{...})` → `mc.Queues.Ephemeral(ctx, &modal.QueueEphemeralParams{...})`
+- `modal.QueueDelete(ctx, ..., &modal.DeleteOptions{...})` → `mc.Queues.Delete(ctx, ..., &modal.QueueDeleteParams{...})`
+
+Queue methods:
+- `queue.Clear(&modal.QueueClearOptions{...})` → `queue.Clear(ctx, &modal.QueueClearParams{...})`
+- `queue.Get(&modal.QueueGetOptions{...})` → `queue.Get(ctx, &modal.QueueGetParams{...})`
+- `queue.Put(..., &modal.QueuePutOptions{...})` → `queue.Put(ctx, ..., &modal.QueuePutParams{...})`
+- `queue.Len(&modal.QueueLenOptions{...})` → `queue.Len(ctx, &modal.QueueLenParams{...})`
+</Accordion>
+
+<Accordion title="Sandbox">
+- `app.CreateSandbox(image, &modal.SandboxOptions{...})` → `mc.Sandboxes.Create(ctx, app, image, &modal.SandboxCreateParams{...})`
+- `modal.SandboxFromId(ctx, "sandbox-id")` → `mc.Sandboxes.FromID(ctx, "sandbox-id")`
+- `modal.SandboxFromName(ctx, "app-name", "sandbox-name", &modal.SandboxFromNameOptions{...})` → `mc.Sandboxes.FromName(ctx, "app-name", "sandbox-name", &modal.SandboxFromNameParams{...})`
+- `modal.SandboxList(ctx, &modal.SandboxListOptions{...})` → `mc.Sandboxes.List(ctx, &modal.SandboxListParams{...})`
+
+Sandbox methods:
+- `sandbox.Exec(..., modal.ExecOptions{...})` → `sandbox.Exec(ctx, ..., &modal.SandboxExecParams{...})`
+- `sandbox.Terminate()` → `sandbox.Terminate(ctx)`
+- `sandbox.Wait()` → `sandbox.Wait(ctx)`
+</Accordion>
+
+<Accordion title="Secret">
+- `modal.SecretFromName(ctx, ..., &modal.SecretFromNameOptions{...})` → `mc.Secrets.FromName(ctx, ..., &modal.SecretFromNameParams{...})`
+- `modal.SecretFromMap(ctx, ..., &modal.SecretFromMapOptions{...})` → `mc.Secrets.FromMap(ctx, ..., &modal.SecretFromMapParams{...})`
+</Accordion>
+
+<Accordion title="Volume">
+- `modal.VolumeFromName(ctx, ..., &modal.VolumeFromNameOptions{...})` → `mc.Volumes.FromName(ctx, ..., &modal.VolumeFromNameParams{...})`
+- `modal.VolumeEphemeral(ctx, &modal.EphemeralOptions{...})` → `mc.Volumes.Ephemeral(ctx, &modal.VolumeEphemeralParams{...})`
+</Accordion>
+
+### Parameter name changes
+
+#### Unit suffixes
+
+Memory parameters now include explicit unit suffixes:
+- `memory` → `memoryMiB`
+- `memoryLimit` → `memoryLimitMiB`
+
+## Getting help
+
+If you encounter any issues during migration, please:
+
+- Check the updated examples in the [JS examples](https://github.com/modal-labs/libmodal/tree/main/modal-js/examples) and [Go examples](https://github.com/modal-labs/libmodal/tree/main/modal-go/examples)
+- Reach out to Modal support for assistance

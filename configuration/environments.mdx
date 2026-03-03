@@ -1,0 +1,213 @@
+---
+title: Environment configuration
+description: Organize and isolate your Modal resources across development, staging, and production
+---
+
+Environments in Modal allow you to organize and isolate resources like functions, secrets, and volumes. Common use cases include separating development from production workloads, or creating isolated environments for different projects.
+
+## Using environments
+
+### Reference an environment
+
+You can reference an environment by name:
+
+```python
+import modal
+
+env = modal.Environment.from_name("dev")
+```
+
+If the environment doesn't exist, you'll receive an error. To create it automatically if it's missing:
+
+```python
+env = modal.Environment.from_name("staging", create_if_missing=True)
+```
+
+### Setting the active environment
+
+The active environment is used by default for all Modal operations. You can set it using:
+
+**Via CLI flag:**
+```bash
+modal run --env=dev my_script.py
+```
+
+**Via environment variable:**
+```bash
+export MODAL_ENVIRONMENT=dev
+modal run my_script.py
+```
+
+**Via configuration:**
+The Modal configuration file supports setting a default environment.
+
+### Environment-specific resources
+
+When creating or referencing Modal resources, you can specify which environment they belong to:
+
+```python
+# Create a secret in a specific environment
+modal.Secret.objects.create(
+    "my-secret",
+    {"API_KEY": "value"},
+    environment_name="dev"
+)
+
+# Reference a secret from a specific environment
+secret = modal.Secret.from_name("my-secret", environment_name="production")
+```
+
+## Managing environments
+
+Modal provides utility functions for managing environments programmatically.
+
+### Create an environment
+
+```python
+from modal.environments import create_environment
+
+create_environment("staging")
+```
+
+### List environments
+
+Retrieve all environments in your workspace:
+
+```python
+from modal.environments import list_environments
+
+environments = list_environments()
+for env in environments:
+    print(env.name)
+```
+
+### Update an environment
+
+You can rename an environment or update its web suffix:
+
+```python
+from modal.environments import update_environment
+
+# Rename an environment
+update_environment("old-name", new_name="new-name")
+
+# Update the web suffix
+update_environment("dev", new_web_suffix="dev-team")
+```
+
+### Delete an environment
+
+<Warning>
+  Deleting an environment is irreversible and will affect all resources associated with it.
+</Warning>
+
+```python
+from modal.environments import delete_environment
+
+delete_environment("old-env")
+```
+
+## Environment settings
+
+Each environment has associated settings that control behavior:
+
+- **Image builder version**: Controls which version of the image builder is used
+- **Webhook suffix**: Custom suffix for webhook URLs in this environment
+
+These settings are configured server-side and returned when you hydrate an environment object.
+
+## Best practices
+
+### Development workflow
+
+A common pattern is to use different environments for different stages:
+
+```python
+import modal
+import os
+
+# Determine environment from environment variable
+env_name = os.getenv("DEPLOY_ENV", "dev")
+
+app = modal.App()
+
+# Use environment-specific secrets
+@app.function(secrets=[modal.Secret.from_name("api-credentials", environment_name=env_name)])
+def my_function():
+    pass
+```
+
+### Environment isolation
+
+Environments provide complete isolation between resources:
+- Secrets in one environment are not accessible from another
+- Functions deployed to different environments are completely separate
+- Volumes and other storage are environment-specific
+
+This makes environments ideal for:
+- Separating production from development workloads
+- Creating isolated test environments
+- Managing multi-tenant applications
+- Organizing resources by project or team
+
+## API reference
+
+### Environment.from_name()
+
+<ParamField path="name" type="str" required>
+  Name of the environment to reference.
+</ParamField>
+
+<ParamField path="create_if_missing" type="bool" default="False">
+  If `True`, creates the environment if it doesn't exist.
+</ParamField>
+
+<ParamField path="client" type="_Client" default="None">
+  Optional client with Modal credentials.
+</ParamField>
+
+### create_environment()
+
+<ParamField path="name" type="str" required>
+  Name for the new environment.
+</ParamField>
+
+<ParamField path="client" type="_Client" default="None">
+  Optional client with Modal credentials.
+</ParamField>
+
+### list_environments()
+
+<ParamField path="client" type="_Client" default="None">
+  Optional client with Modal credentials.
+</ParamField>
+
+**Returns:** `list[EnvironmentListItem]` - List of environment metadata objects.
+
+### update_environment()
+
+<ParamField path="current_name" type="str" required>
+  Current name of the environment to update.
+</ParamField>
+
+<ParamField path="new_name" type="str" default="None">
+  New name for the environment.
+</ParamField>
+
+<ParamField path="new_web_suffix" type="str" default="None">
+  New webhook suffix for the environment.
+</ParamField>
+
+<ParamField path="client" type="_Client" default="None">
+  Optional client with Modal credentials.
+</ParamField>
+
+### delete_environment()
+
+<ParamField path="name" type="str" required>
+  Name of the environment to delete.
+</ParamField>
+
+<ParamField path="client" type="_Client" default="None">
+  Optional client with Modal credentials.
+</ParamField>

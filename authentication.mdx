@@ -1,0 +1,291 @@
+---
+title: Authentication
+description: Set up authentication to use the Modal Client SDKs
+---
+
+To use the Modal Client SDKs, you need to authenticate with Modal. There are two methods: interactive setup using the Modal CLI, or manual configuration using environment variables.
+
+## Method 1: Interactive setup (recommended)
+
+The easiest way to authenticate is using the Modal CLI's interactive setup:
+
+<Steps>
+  <Step title="Install the Python SDK">
+    The Modal CLI is part of the Python SDK:
+
+    ```bash
+    pip install modal
+    ```
+  </Step>
+
+  <Step title="Run the setup command">
+    Run the setup wizard to authenticate:
+
+    ```bash
+    python3 -m modal setup
+    ```
+
+    This will:
+    - Open your browser to log in or create a Modal account
+    - Generate API credentials
+    - Save them to `~/.modal.toml`
+  </Step>
+
+  <Step title="Verify authentication">
+    Test that authentication is working:
+
+    <Tabs>
+      <Tab title="Python">
+        ```python
+        import modal
+        
+        client = modal.Client()
+        print("Authentication successful!")
+        ```
+      </Tab>
+
+      <Tab title="TypeScript">
+        ```typescript
+        import { ModalClient } from "modal";
+        
+        const modal = new ModalClient();
+        console.log("Authentication successful!");
+        ```
+      </Tab>
+
+      <Tab title="Go">
+        ```go
+        package main
+
+        import (
+            "fmt"
+            "log"
+            
+            modal "github.com/modal-labs/modal-client/go"
+        )
+
+        func main() {
+            mc, err := modal.NewClient()
+            if err != nil {
+                log.Fatalf("Authentication failed: %v", err)
+            }
+            fmt.Println("Authentication successful!")
+        }
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+<Note>
+  The configuration file is saved to `~/.modal.toml` by default. You can customize this location using the `MODAL_CONFIG_PATH` environment variable.
+</Note>
+
+## Method 2: Environment variables
+
+For automated environments, CI/CD pipelines, or production deployments, use environment variables:
+
+<Steps>
+  <Step title="Get your API credentials">
+    Log in to your [Modal dashboard](https://modal.com/settings/tokens) and create a new token. You'll receive:
+    - A **Token ID** (starts with `ak-`)
+    - A **Token Secret** (starts with `as-`)
+
+    <Warning>
+      Store your token secret securely. It will only be shown once and provides full access to your Modal account.
+    </Warning>
+  </Step>
+
+  <Step title="Set environment variables">
+    Export the credentials as environment variables:
+
+    ```bash
+    export MODAL_TOKEN_ID=ak-YOUR_TOKEN_ID_HERE
+    export MODAL_TOKEN_SECRET=as-YOUR_TOKEN_SECRET_HERE
+    ```
+
+    For production, add these to your deployment environment or secrets manager.
+  </Step>
+
+  <Step title="Verify authentication">
+    The SDKs will automatically detect and use these environment variables:
+
+    <Tabs>
+      <Tab title="Python">
+        ```python
+        import modal
+        
+        # Credentials are automatically loaded from environment variables
+        client = modal.Client()
+        print("Authentication successful!")
+        ```
+      </Tab>
+
+      <Tab title="TypeScript">
+        ```typescript
+        import { ModalClient } from "modal";
+        
+        // Credentials are automatically loaded from environment variables
+        const modal = new ModalClient();
+        console.log("Authentication successful!");
+        ```
+      </Tab>
+
+      <Tab title="Go">
+        ```go
+        package main
+
+        import (
+            "fmt"
+            "log"
+            
+            modal "github.com/modal-labs/modal-client/go"
+        )
+
+        func main() {
+            // Credentials are automatically loaded from environment variables
+            mc, err := modal.NewClient()
+            if err != nil {
+                log.Fatalf("Authentication failed: %v", err)
+            }
+            fmt.Println("Authentication successful!")
+        }
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Programmatic authentication
+
+You can also pass credentials directly when creating a client:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { ModalClient } from "modal";
+
+    const modal = new ModalClient({
+      tokenId: "ak-YOUR_TOKEN_ID_HERE",
+      tokenSecret: "as-YOUR_TOKEN_SECRET_HERE"
+    });
+    ```
+  </Tab>
+
+  <Tab title="Go">
+    ```go
+    import modal "github.com/modal-labs/modal-client/go"
+
+    mc, err := modal.NewClient(
+        modal.WithTokenID("ak-YOUR_TOKEN_ID_HERE"),
+        modal.WithTokenSecret("as-YOUR_TOKEN_SECRET_HERE"),
+    )
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Avoid hardcoding credentials in your source code. Use environment variables or a secrets manager instead.
+</Warning>
+
+## Configuration file location
+
+By default, the SDKs look for credentials in `~/.modal.toml`. You can customize this location:
+
+```bash
+export MODAL_CONFIG_PATH=/path/to/custom/modal.toml
+```
+
+The configuration file format:
+
+```toml ~/.modal.toml
+[default]
+token_id = "ak-YOUR_TOKEN_ID_HERE"
+token_secret = "as-YOUR_TOKEN_SECRET_HERE"
+```
+
+## Credential precedence
+
+The SDKs check for credentials in this order:
+
+1. **Programmatic credentials** passed to the client constructor
+2. **Environment variables** (`MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`)
+3. **Configuration file** at `~/.modal.toml` or `$MODAL_CONFIG_PATH`
+
+## Managing multiple accounts
+
+If you need to work with multiple Modal accounts, you can:
+
+1. Use different configuration file paths with `MODAL_CONFIG_PATH`
+2. Create separate environment variable sets for each account
+3. Pass different credentials programmatically to different client instances
+
+## Troubleshooting
+
+### Authentication errors
+
+If you see authentication errors:
+
+<Steps>
+  <Step title="Check credentials">
+    Verify that your `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` are set correctly:
+
+    ```bash
+    echo $MODAL_TOKEN_ID
+    echo $MODAL_TOKEN_SECRET
+    ```
+  </Step>
+
+  <Step title="Verify token is active">
+    Log in to your [Modal dashboard](https://modal.com/settings/tokens) and confirm the token is still active and not expired.
+  </Step>
+
+  <Step title="Check config file">
+    If using a config file, verify it exists and has the correct format:
+
+    ```bash
+    cat ~/.modal.toml
+    ```
+  </Step>
+
+  <Step title="Re-run setup">
+    If all else fails, re-run the setup process:
+
+    ```bash
+    python3 -m modal setup
+    ```
+  </Step>
+</Steps>
+
+### Permission errors
+
+If you get permission errors when accessing resources:
+
+- Verify that your token has the necessary permissions
+- Check that you're using the correct workspace/organization
+- Ensure the resources you're trying to access exist and you have access to them
+
+## Security best practices
+
+<CardGroup cols={2}>
+  <Card title="Never commit credentials" icon="shield-check">
+    Add `.modal.toml` and credential files to `.gitignore`
+  </Card>
+  <Card title="Use environment variables" icon="key">
+    In production, use secrets managers or environment variables
+  </Card>
+  <Card title="Rotate tokens regularly" icon="rotate">
+    Generate new tokens periodically and revoke old ones
+  </Card>
+  <Card title="Use minimal permissions" icon="lock">
+    Create tokens with only the permissions you need
+  </Card>
+</CardGroup>
+
+## Next steps
+
+Now that you're authenticated, you're ready to start building:
+
+<Card title="Quick start guide" icon="rocket" href="/quickstart">
+  Build your first Modal application
+</Card>

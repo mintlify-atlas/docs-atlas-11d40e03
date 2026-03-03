@@ -1,0 +1,226 @@
+---
+title: Functions
+description: Invoke deployed Modal Functions remotely
+---
+
+Functions represent deployed Modal functions that can be invoked remotely from your TypeScript application.
+
+## Access the Functions API
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const fn = await modal.functions.fromName("my-app", "my_function");
+```
+
+## Methods
+
+### `modal.functions.fromName(appName, name, params?)`
+
+Reference a Function by its name in an App.
+
+<ParamField path="appName" type="string" required>
+  Name of the App containing the Function.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Name of the Function to reference.
+</ParamField>
+
+<ParamField path="params" type="FunctionFromNameParams" optional>
+  Optional parameters
+  
+  <Expandable title="properties">
+    <ParamField path="environment" type="string" optional>
+      Environment name to use.
+    </ParamField>
+    
+    <ParamField path="createIfMissing" type="boolean" optional>
+      If `true`, creates the Function if it doesn't exist. Defaults to `false`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Function_>">
+  The referenced Function object.
+</ResponseField>
+
+```typescript
+const fn = await modal.functions.fromName("my-app", "square");
+```
+
+<Note>
+  To call class methods, use the [Cls API](/api/typescript/cls) instead.
+</Note>
+
+## Function object
+
+### Properties
+
+<ResponseField name="functionId" type="string">
+  Unique identifier for the Function.
+</ResponseField>
+
+<ResponseField name="methodName" type="string | undefined">
+  Method name if this Function is a class method.
+</ResponseField>
+
+### Methods
+
+#### `remote(args?, kwargs?)`
+
+Execute the Function remotely and wait for the result.
+
+<ParamField path="args" type="any[]" optional>
+  Positional arguments to pass to the Function. Defaults to `[]`.
+</ParamField>
+
+<ParamField path="kwargs" type="Record<string, any>" optional>
+  Keyword arguments to pass to the Function. Defaults to `{}`.
+</ParamField>
+
+<ResponseField name="return" type="Promise<any>">
+  The return value from the Function.
+</ResponseField>
+
+```typescript
+const fn = await modal.functions.fromName("my-app", "square");
+
+// Call with positional arguments
+const result = await fn.remote([5]);
+console.log(result); // 25
+
+// Call with keyword arguments
+const greet = await modal.functions.fromName("my-app", "greet");
+const message = await greet.remote([], { name: "Alice" });
+console.log(message); // "Hello, Alice!"
+```
+
+<Warning>
+  Requires the deployed app to use Modal Python SDK 1.2 or newer for serialization compatibility.
+</Warning>
+
+#### `spawn(args?, kwargs?)`
+
+Spawn the Function asynchronously without waiting for the result.
+
+<ParamField path="args" type="any[]" optional>
+  Positional arguments to pass to the Function.
+</ParamField>
+
+<ParamField path="kwargs" type="Record<string, any>" optional>
+  Keyword arguments to pass to the Function.
+</ParamField>
+
+<ResponseField name="return" type="Promise<FunctionCall>">
+  A FunctionCall object that can be used to retrieve the result later.
+</ResponseField>
+
+```typescript
+const fn = await modal.functions.fromName("my-app", "process_data");
+
+// Spawn the function
+const call = await fn.spawn(["large_dataset"]);
+
+// Do other work...
+
+// Get the result later
+const result = await call.get();
+```
+
+#### `getCurrentStats()`
+
+Get current statistics about the running Function.
+
+<ResponseField name="return" type="Promise<FunctionStats>">
+  Statistics object containing:
+  
+  <Expandable title="properties">
+    <ResponseField name="backlog" type="number">
+      Number of queued inputs waiting to be processed.
+    </ResponseField>
+    
+    <ResponseField name="numTotalRunners" type="number">
+      Total number of running containers for this Function.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```typescript
+const stats = await fn.getCurrentStats();
+console.log(`Backlog: ${stats.backlog}, Runners: ${stats.numTotalRunners}`);
+```
+
+#### `updateAutoscaler(params)`
+
+Override the autoscaling behavior for this Function.
+
+<ParamField path="params" type="FunctionUpdateAutoscalerParams" required>
+  Autoscaler configuration
+  
+  <Expandable title="properties">
+    <ParamField path="minContainers" type="number" optional>
+      Minimum number of containers to maintain.
+    </ParamField>
+    
+    <ParamField path="maxContainers" type="number" optional>
+      Maximum number of containers to scale to.
+    </ParamField>
+    
+    <ParamField path="bufferContainers" type="number" optional>
+      Number of extra containers to maintain for burst capacity.
+    </ParamField>
+    
+    <ParamField path="scaledownWindowMs" type="number" optional>
+      Time in milliseconds before scaling down idle containers. Must be a multiple of 1000.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+await fn.updateAutoscaler({
+  minContainers: 1,
+  maxContainers: 10,
+  bufferContainers: 2,
+  scaledownWindowMs: 60000, // 60 seconds
+});
+```
+
+#### `getWebUrl()`
+
+Get the web URL if this Function is deployed as a web endpoint.
+
+<ResponseField name="return" type="Promise<string | undefined>">
+  The web URL, or `undefined` if this is not a web endpoint.
+</ResponseField>
+
+```typescript
+const url = await fn.getWebUrl();
+if (url) {
+  console.log(`Function available at: ${url}`);
+}
+```
+
+## Example: Batch processing
+
+```typescript
+import { ModalClient } from "modal";
+
+const modal = new ModalClient();
+const processImage = await modal.functions.fromName("my-app", "process_image");
+
+const images = ["img1.jpg", "img2.jpg", "img3.jpg"];
+
+// Spawn all calls asynchronously
+const calls = await Promise.all(
+  images.map((img) => processImage.spawn([img]))
+);
+
+// Wait for all results
+const results = await Promise.all(
+  calls.map((call) => call.get())
+);
+
+console.log("Processed images:", results);
+```

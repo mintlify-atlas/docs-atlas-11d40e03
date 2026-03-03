@@ -1,0 +1,245 @@
+---
+title: Functions
+description: Call deployed Modal Functions from Go
+---
+
+Functions allow you to execute code remotely on Modal's infrastructure.
+
+## Referencing functions
+
+### FromName
+
+References a Function from a deployed App by its name.
+
+```go
+fn, err := mc.Functions.FromName(ctx, "my-app", "my_function", nil)
+if err != nil {
+    // Handle error
+}
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="appName" type="string" required>
+  The name of the App containing the Function
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The name of the Function (tag in the App)
+</ParamField>
+
+<ParamField path="params" type="*FunctionFromNameParams">
+  Optional parameters
+  
+  <ParamField path="Environment" type="string">
+    Environment name. Defaults to client's environment.
+  </ParamField>
+  
+  <ParamField path="CreateIfMissing" type="bool">
+    Not used for Functions (only for Apps)
+  </ParamField>
+</ParamField>
+
+<Warning>
+  To reference class methods, use the [Cls API](/api/go/cls) instead. `FromName` will return an error if you try to reference a class method (e.g., `"MyClass.method"`).
+</Warning>
+
+**Returns:**
+- `*Function` - The Function instance
+- `error` - NotFoundError if the Function doesn't exist
+
+## Function methods
+
+### Remote
+
+Executes the Function remotely and waits for the result.
+
+```go
+result, err := fn.Remote(ctx, []any{"arg1", 123}, map[string]any{
+    "key": "value",
+})
+if err != nil {
+    // Handle error
+}
+fmt.Println("Result:", result)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="args" type="[]any" required>
+  Positional arguments to pass to the Function. Use `nil` or `[]any{}` for no arguments.
+</ParamField>
+
+<ParamField path="kwargs" type="map[string]any">
+  Keyword arguments to pass to the Function. Use `nil` or `map[string]any{}` for no keyword arguments.
+</ParamField>
+
+**Returns:**
+- `any` - The Function's return value (deserialized from CBOR)
+- `error` - Error if the Function fails or cannot be called
+
+<Note>
+  Requires the deployed Function to use Modal Python SDK 1.2 or newer with CBOR serialization support.
+</Note>
+
+### Spawn
+
+Starts a Function execution asynchronously and returns immediately with a FunctionCall handle.
+
+```go
+functionCall, err := fn.Spawn(ctx, []any{"arg1"}, nil)
+if err != nil {
+    // Handle error
+}
+
+// Later, get the result
+result, err := functionCall.Get(ctx, nil)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="args" type="[]any" required>
+  Positional arguments
+</ParamField>
+
+<ParamField path="kwargs" type="map[string]any">
+  Keyword arguments
+</ParamField>
+
+**Returns:**
+- `*FunctionCall` - A handle to the spawned Function execution
+- `error` - Error if spawning fails
+
+### GetCurrentStats
+
+Returns current statistics about the Function's execution.
+
+```go
+stats, err := fn.GetCurrentStats(ctx)
+if err != nil {
+    // Handle error
+}
+fmt.Printf("Backlog: %d, Runners: %d\n", stats.Backlog, stats.NumTotalRunners)
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+**Returns:**
+- `*FunctionStats` - Current statistics
+  - `Backlog` (int) - Number of pending inputs
+  - `NumTotalRunners` (int) - Total number of running containers
+- `error` - Error if the request fails
+
+### UpdateAutoscaler
+
+Overrides the autoscaler settings for this Function.
+
+```go
+minContainers := uint32(1)
+maxContainers := uint32(10)
+
+err := fn.UpdateAutoscaler(ctx, &modal.FunctionUpdateAutoscalerParams{
+    MinContainers: &minContainers,
+    MaxContainers: &maxContainers,
+})
+```
+
+<ParamField path="ctx" type="context.Context" required>
+  Context for the operation
+</ParamField>
+
+<ParamField path="params" type="*FunctionUpdateAutoscalerParams">
+  Autoscaler parameters
+  
+  <ParamField path="MinContainers" type="*uint32">
+    Minimum number of containers to keep warm
+  </ParamField>
+  
+  <ParamField path="MaxContainers" type="*uint32">
+    Maximum number of containers to scale to
+  </ParamField>
+  
+  <ParamField path="BufferContainers" type="*uint32">
+    Number of extra containers to keep ready
+  </ParamField>
+  
+  <ParamField path="ScaledownWindow" type="*uint32">
+    Time in seconds before scaling down idle containers
+  </ParamField>
+</ParamField>
+
+**Returns:**
+- `error` - Error if the update fails
+
+### GetWebURL
+
+Returns the web URL if this Function is a web endpoint.
+
+```go
+url := fn.GetWebURL()
+if url != "" {
+    fmt.Println("Web endpoint:", url)
+}
+```
+
+**Returns:**
+- `string` - The web URL, or empty string if not a web endpoint
+
+## Function type
+
+<ResponseField name="FunctionID" type="string">
+  The unique identifier for the Function
+</ResponseField>
+
+## Example usage
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/modal-labs/modal-client/go"
+)
+
+func main() {
+    ctx := context.Background()
+    mc, _ := modal.NewClient()
+    defer mc.Close()
+
+    // Get a Function reference
+    fn, err := mc.Functions.FromName(ctx, "my-app", "square", nil)
+    if err != nil {
+        panic(err)
+    }
+
+    // Call the Function synchronously
+    result, err := fn.Remote(ctx, []any{5}, nil)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Result: %v\n", result) // Result: 25
+
+    // Spawn multiple calls asynchronously
+    var calls []*modal.FunctionCall
+    for i := 0; i < 5; i++ {
+        call, _ := fn.Spawn(ctx, []any{i}, nil)
+        calls = append(calls, call)
+    }
+
+    // Collect results
+    for _, call := range calls {
+        result, _ := call.Get(ctx, nil)
+        fmt.Printf("Async result: %v\n", result)
+    }
+}
+```

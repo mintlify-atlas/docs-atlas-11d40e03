@@ -1,0 +1,267 @@
+---
+title: Retry configuration
+description: Configure automatic retry behavior for Modal functions
+---
+
+The `Retries` class adds a retry policy to Modal functions, allowing you to automatically retry failed function executions with configurable backoff strategies.
+
+## Basic usage
+
+The simplest way to add retries is to specify a maximum number of retry attempts:
+
+```python
+import modal
+
+app = modal.App()
+
+# Retry up to 4 times with 1-second delay between failures
+@app.function(retries=4)
+def f():
+    pass
+```
+
+## Custom retry policies
+
+For more control over retry behavior, use the `Retries` class:
+
+### Fixed-interval retries
+
+Retry with a constant delay between attempts:
+
+```python
+@app.function(
+    retries=modal.Retries(
+        max_retries=2,
+        backoff_coefficient=1.0,  # Fixed delay
+        initial_delay=3.0,  # 3-second delay
+    )
+)
+def g():
+    pass
+```
+
+With `backoff_coefficient=1.0`, the delay remains constant at `initial_delay` for all retry attempts.
+
+### Exponential backoff
+
+Retry with exponentially increasing delays:
+
+```python
+@app.function(
+    retries=modal.Retries(
+        max_retries=4,
+        backoff_coefficient=2.0,  # Double delay after each failure
+        initial_delay=1.0,  # Start with 1 second
+    )
+)
+def h():
+    pass
+```
+
+With `backoff_coefficient=2.0`, delays will be: 1s, 2s, 4s, 8s (up to `max_delay`).
+
+### Custom backoff strategy
+
+Use different backoff coefficients for various retry patterns:
+
+```python
+# Aggressive backoff (4x multiplier)
+@app.function(
+    retries=modal.Retries(
+        max_retries=3,
+        backoff_coefficient=4.0,
+        initial_delay=1.0,
+    )
+)
+def aggressive_backoff():
+    pass  # Delays: 1s, 4s, 16s
+
+# Moderate backoff (1.5x multiplier)
+@app.function(
+    retries=modal.Retries(
+        max_retries=5,
+        backoff_coefficient=1.5,
+        initial_delay=2.0,
+    )
+)
+def moderate_backoff():
+    pass  # Delays: 2s, 3s, 4.5s, 6.75s, 10.125s
+```
+
+## Retry parameters
+
+### max_retries
+
+The maximum number of retry attempts when a function fails:
+
+```python
+@app.function(retries=modal.Retries(max_retries=5))
+def f():
+    pass
+```
+
+<Note>
+  `max_retries` must be non-negative. Setting it to `0` means no retries will occur.
+</Note>
+
+### initial_delay
+
+The number of seconds that must elapse before the first retry:
+
+```python
+@app.function(
+    retries=modal.Retries(
+        max_retries=3,
+        initial_delay=5.0,  # Wait 5 seconds before first retry
+    )
+)
+def f():
+    pass
+```
+
+Valid range: `0` to `60` seconds.
+
+### backoff_coefficient
+
+Controls how much the retry delay increases with each attempt:
+
+```python
+# Fixed interval (no increase)
+@app.function(retries=modal.Retries(max_retries=3, backoff_coefficient=1.0))
+def fixed():
+    pass
+
+# Exponential backoff (2x increase)
+@app.function(retries=modal.Retries(max_retries=3, backoff_coefficient=2.0))
+def exponential():
+    pass
+
+# Aggressive backoff (5x increase)
+@app.function(retries=modal.Retries(max_retries=3, backoff_coefficient=5.0))
+def aggressive():
+    pass
+```
+
+Valid range: `1.0` (fixed-interval) to `10.0`.
+
+### max_delay
+
+Prevents the retry delay from growing infinitely:
+
+```python
+@app.function(
+    retries=modal.Retries(
+        max_retries=10,
+        backoff_coefficient=2.0,
+        initial_delay=1.0,
+        max_delay=30.0,  # Cap delay at 30 seconds
+    )
+)
+def f():
+    pass
+```
+
+Even with exponential backoff, the delay will never exceed `max_delay`.
+
+Valid range: `1` to `60` seconds.
+
+## How retries work
+
+When a function fails:
+
+1. Modal checks if there are remaining retry attempts
+2. If yes, it waits for the calculated delay period
+3. The delay is calculated as: `initial_delay * (backoff_coefficient ^ (attempt - 1))`
+4. The delay is capped at `max_delay`
+5. After the delay, the function is retried
+6. This continues until success or `max_retries` is exhausted
+
+### Retry delay calculation
+
+For `initial_delay=1.0` and `backoff_coefficient=2.0`:
+
+- Attempt 1 delay: `1.0 * (2.0 ^ 0)` = 1.0 seconds
+- Attempt 2 delay: `1.0 * (2.0 ^ 1)` = 2.0 seconds  
+- Attempt 3 delay: `1.0 * (2.0 ^ 2)` = 4.0 seconds
+- Attempt 4 delay: `1.0 * (2.0 ^ 3)` = 8.0 seconds
+
+## Common patterns
+
+### Quick retries for transient failures
+
+```python
+# Retry quickly for network blips
+@app.function(
+    retries=modal.Retries(
+        max_retries=3,
+        initial_delay=0.5,  # 500ms
+        backoff_coefficient=1.5,
+    )
+)
+def api_call():
+    pass
+```
+
+### Patient retries for rate limits
+
+```python
+# Back off significantly for rate-limited APIs
+@app.function(
+    retries=modal.Retries(
+        max_retries=5,
+        initial_delay=10.0,  # Start at 10 seconds
+        backoff_coefficient=2.0,
+        max_delay=60.0,
+    )
+)
+def rate_limited_api():
+    pass
+```
+
+### No retries
+
+```python
+# Explicitly disable retries
+@app.function(retries=0)
+def no_retry():
+    pass
+```
+
+## API reference
+
+### Retries()
+
+<ParamField path="max_retries" type="int" required>
+  The maximum number of retries in the presence of failures. Must be non-negative.
+</ParamField>
+
+<ParamField path="backoff_coefficient" type="float" default="2.0">
+  Coefficient controlling how much the retry delay increases each attempt. A value of `1.0` creates fixed-delay retries. Must be between `1.0` and `10.0`.
+</ParamField>
+
+<ParamField path="initial_delay" type="float" default="1.0">
+  Number of seconds that must elapse before the first retry. Must be between `0` and `60` seconds.
+</ParamField>
+
+<ParamField path="max_delay" type="float" default="60.0">
+  Maximum length of retry delay in seconds, preventing infinite growth. Must be between `1` and `60` seconds.
+</ParamField>
+
+### Simple integer retries
+
+For convenience, you can pass an integer directly to the `retries` parameter:
+
+<ParamField path="retries" type="int">
+  Maximum number of retries with default settings (1-second initial delay, 2.0 backoff coefficient).
+</ParamField>
+
+```python
+# These are equivalent:
+@app.function(retries=4)
+def f1():
+    pass
+
+@app.function(retries=modal.Retries(max_retries=4))
+def f2():
+    pass
+```

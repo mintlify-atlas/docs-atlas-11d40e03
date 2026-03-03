@@ -1,0 +1,138 @@
+---
+title: Python SDK overview
+description: Learn about Modal's Python SDK features and capabilities for serverless cloud computing.
+---
+
+The Modal Python SDK provides convenient, on-demand access to serverless cloud compute from Python scripts on your local computer.
+
+## Key features
+
+Modal's Python SDK offers powerful capabilities for running code in the cloud:
+
+- **Serverless functions**: Deploy Python functions that scale automatically
+- **Container orchestration**: Run code in custom container environments
+- **GPU support**: Access GPUs for machine learning workloads
+- **Persistent storage**: Use volumes, dicts, and queues for data persistence
+- **Web endpoints**: Create HTTP endpoints with FastAPI, ASGI, or WSGI
+- **Scheduled jobs**: Run functions on cron schedules or periodic intervals
+- **Async support**: Full support for async/await patterns
+
+## Python version support
+
+The Modal SDK requires **Python 3.10 through 3.14**. The SDK will raise a runtime error if you attempt to use it with unsupported Python versions.
+
+From `modal/__init__.py:4-7`:
+
+```python
+if sys.version_info[:2] < (3, 10):
+    raise RuntimeError("This version of Modal requires at least Python 3.10")
+if sys.version_info[:2] >= (3, 15):
+    raise RuntimeError("This version of Modal does not support Python 3.15+")
+```
+
+## Core concepts
+
+### Apps
+
+An `App` is the main entry point for defining Modal applications. Apps contain functions, classes, and other resources:
+
+```python
+import modal
+
+app = modal.App("my-app")
+
+@app.function()
+def my_function():
+    return "Hello from Modal!"
+```
+
+### Functions
+
+Functions are the primary way to run code on Modal. Decorate any Python function with `@app.function()` to run it in the cloud:
+
+```python
+@app.function()
+def process_data(data: str):
+    # Runs in a Modal container
+    return data.upper()
+```
+
+### Images
+
+Images define the container environment for your functions. Modal provides pre-built images and supports custom configurations:
+
+```python
+image = modal.Image.debian_slim().pip_install("pandas", "numpy")
+
+@app.function(image=image)
+def analyze_data():
+    import pandas as pd
+    # Your code here
+```
+
+### Resources
+
+Modal provides several resource types for data persistence and communication:
+
+- **Volume**: Persistent file storage across function invocations
+- **Dict**: Key-value store for structured data
+- **Queue**: FIFO queue for task distribution
+- **Secret**: Secure storage for API keys and credentials
+- **NetworkFileSystem**: Shared file system for concurrent access
+
+## Available exports
+
+The Modal SDK exports the following classes and functions (from `modal/__init__.py:57-99`):
+
+**Core classes:**
+- `App` - Main application container
+- `Client` - Low-level API client
+- `Function`, `FunctionCall` - Function primitives
+- `Image` - Container image builder
+
+**Compute resources:**
+- `Cls` - Parameterized classes
+- `Sandbox`, `SandboxSnapshot` - Interactive environments
+
+**Storage:**
+- `Volume` - Persistent volumes
+- `Dict` - Distributed dictionaries
+- `Queue` - Distributed queues
+- `NetworkFileSystem` - Network file systems
+- `CloudBucketMount` - Cloud storage mounting
+
+**Configuration:**
+- `Secret` - Secure credentials
+- `Retries` - Retry policies
+- `Cron`, `Period` - Scheduling
+- `SchedulerPlacement` - Placement constraints
+
+**Decorators:**
+- `web_endpoint` - HTTP endpoints
+- `fastapi_endpoint` - FastAPI integration  
+- `asgi_app`, `wsgi_app` - ASGI/WSGI apps
+- `batched` - Batch processing
+- `concurrent` - Concurrent execution
+
+**Utilities:**
+- `is_local()` - Check execution context
+- `current_input_id()`, `current_function_call_id()` - Runtime context
+- `interact()` - Interactive debugging
+- `forward()` - Port forwarding
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/python/installation">
+    Install the Modal Python SDK with pip, uv, or poetry
+  </Card>
+  <Card title="Basic usage" icon="rocket" href="/python/basic-usage">
+    Learn basic patterns for running functions on Modal
+  </Card>
+  <Card title="Async support" icon="bolt" href="/python/async-support">
+    Use async/await with Modal functions
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/python/cli-reference">
+    Explore Modal's command-line interface
+  </Card>
+</CardGroup>
